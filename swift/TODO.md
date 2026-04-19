@@ -7,7 +7,20 @@
 
 ---
 
-## Tasks
+## MVP Tasks (Priority 2: Weeks 2-5)
+
+| # | MVP Item | Files | Status |
+|---|----------|-------|--------|
+| — | Set up basic architecture | All modules + `main.py` | ✅ DONE |
+| — | Get Claude API integration working | `config/settings.py`, `scanners/`, `patches/` | ✅ DONE |
+| — | Build vulnerability scanner (Haiku triage) | `triage/patterns.py`, `scanners/haiku_scanner.py`, `scanners/sonnet_scanner.py` | ✅ DONE |
+| — | Build patch generator (basic) | `patches/generator.py` | ✅ DONE |
+| — | Build sandbox tester | `sandbox/docker_runner.py` | ✅ DONE |
+| — | **Deploy publicly** | `Dockerfile`, `fly.toml` or `render.yaml`, `pyproject.toml` | ⬜ PENDING |
+
+---
+
+## Implementation Tasks
 
 | # | Task | File | Status |
 |---|------|------|--------|
@@ -24,17 +37,35 @@
 | 11 | CLI Commands | `cli/commands.py`, `main.py` | ✅ DONE |
 | 12 | Shared Fixtures + Integration Tests | `test/conftest.py`, `test/integration/` | ✅ DONE |
 | 13 | Install and Smoke Test | 97/97 tests pass | ✅ DONE |
+| 14 | TypeScript/JS scanning support | `triage/patterns.py`, `scanners/haiku_scanner.py` | ✅ DONE |
 
 ---
 
-## MVP Complete ✅
+## ⬜ NEXT: Deploy Publicly
 
-All tasks done. Run with:
+**What's needed:**
+
+| Sub-task | File | Status |
+|----------|------|--------|
+| Fix `pyproject.toml` CLI entry point (`main:cli` → `cli.commands:cli`) | `pyproject.toml` | ✅ DONE |
+| Write `Dockerfile` (multi-stage, python:3.10-slim) | `Dockerfile` | ⬜ PENDING |
+| Write deployment config (fly.toml or render.yaml) | `fly.toml` / `render.yaml` | ⬜ PENDING |
+| Add `ANTHROPIC_API_KEY` as secret in deployment platform | Platform secrets | ⬜ PENDING |
+| Smoke test deployed endpoint | — | ⬜ PENDING |
+
+**Deployment options (pick one):**
+- **Fly.io** — `flyctl launch` + `flyctl deploy` (recommended, free tier)
+- **Render** — `render.yaml` + push to GitHub auto-deploys
+- **PyPI package** — `pip install swift-scanner` via `pyproject.toml`
+
+---
+
+## Run Locally
 ```bash
 source .venv/bin/activate
 python main.py scan --repo . --output json
-python main.py scan --repo . --output markdown
-python main.py patch --repo .  # scan + generate patches
+python main.py scan --repo https://github.com/OWNER/REPO --output markdown --patches
+python main.py patch --repo .
 ```
 
 ## Run Tests
@@ -51,3 +82,4 @@ SWIFT_RUN_E2E=1 pytest test/e2e/ -v  # needs real API key
 - jellaharshith/SWIFT#3 — Regex Triage
 - jellaharshith/SWIFT#4 — Haiku Scanner
 - jellaharshith/SWIFT#5 — Sonnet Scanner 95% Gate
+- jellaharshith/SWIFT#8 — TypeScript/JS multi-language scanning support
