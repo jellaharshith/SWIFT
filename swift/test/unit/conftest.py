@@ -1,16 +1,18 @@
+from unittest.mock import patch
+
 import pytest
+
 import config.settings as _settings
 
 
 @pytest.fixture(autouse=True)
 def reset_config_cache():
-    """Reset the module-level config cache before and after every test.
+    """Reset config cache and suppress .env loading so env-var patches work.
 
-    Without this fixture the lazy-loading cache in settings._config would
-    leak between tests: whichever test runs first would 'win' and all
-    subsequent tests would see a stale Config, making env-var patches
-    invisible and turning the test suite order-dependent.
+    load_dotenv() would otherwise populate os.environ from the project's .env
+    file, making it impossible to test the missing-key error path.
     """
     _settings._config = None
-    yield
+    with patch("config.settings.load_dotenv"):
+        yield
     _settings._config = None

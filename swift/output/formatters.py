@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
-from typing import Dict
 
 from agent.models import ScanResult
 
@@ -120,7 +118,7 @@ class MarkdownFormatter:
         lines.append(f"- **Patches generated:** {len(result.patches)}")
         lines.append("")
 
-        # --- Vulnerabilities (omitted when empty to keep report clean) ---
+        # --- Vulnerabilities ---
         if result.vulnerabilities:
             lines.append("## Vulnerabilities")
             lines.append("")
@@ -140,6 +138,10 @@ class MarkdownFormatter:
                 lines.append(vuln.code_snippet)
                 lines.append("```")
                 lines.append("")
+
+        else:
+            lines.append("*No vulnerabilities found.*")
+            lines.append("")
 
         # --- Patches (omitted when empty) ---
         if result.patches:
