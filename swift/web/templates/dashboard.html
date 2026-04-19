@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SWIFT Scanner — Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+    header { background: #1a1d27; border-bottom: 1px solid #2d3748; padding: 1rem 2rem; display: flex; align-items: center; gap: 0.75rem; }
+    header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
+    header .badge { background: #3b82f6; color: #fff; font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 999px; font-weight: 600; text-transform: uppercase; }
+    main { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+    .metric-card { background: #1a1d27; border: 1px solid #2d3748; border-radius: 0.5rem; padding: 1.25rem 1.5rem; }
+    .metric-card .label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .metric-card .value { font-size: 2rem; font-weight: 700; color: #f8fafc; }
+    .metric-card .sub { font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }
+    section h2 { font-size: 1rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
+    .scan-form { background: #1a1d27; border: 1px solid #2d3748; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 2rem; }
+    .scan-form h2 { margin-bottom: 1rem; }
+    .form-row { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; min-width: 240px; }
+    .form-group label { font-size: 0.8rem; color: #94a3b8; }
+    .form-group input { background: #0f1117; border: 1px solid #374151; border-radius: 0.375rem; color: #e2e8f0; padding: 0.6rem 0.75rem; font-size: 0.875rem; outline: none; }
+    .form-group input:focus { border-color: #3b82f6; }
+    .form-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: #94a3b8; padding-bottom: 0.1rem; }
+    .btn { background: #3b82f6; color: #fff; border: none; border-radius: 0.375rem; padding: 0.6rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    .btn:hover { background: #2563eb; }
+    table { width: 100%; border-collapse: collapse; background: #1a1d27; border: 1px solid #2d3748; border-radius: 0.5rem; overflow: hidden; }
+    th { background: #111827; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #2d3748; }
+    td { padding: 0.75rem 1rem; font-size: 0.875rem; border-bottom: 1px solid #1e2433; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #111827; }
+    .scan-id { font-family: monospace; font-size: 0.8rem; color: #60a5fa; }
+    .vuln-count { font-weight: 700; }
+    .vuln-high { color: #f87171; }
+    .vuln-zero { color: #4ade80; }
+    .cost { color: #94a3b8; font-size: 0.8rem; }
+    .empty-state { text-align: center; padding: 3rem; color: #4b5563; }
+    .empty-state p { margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>SWIFT Scanner</h1>
+    <span class="badge">Dashboard</span>
+  </header>
+  <main>
+    <!-- Metrics -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="label">Total Scans</div>
+        <div class="value">{{ metrics.total_scans }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Vulns Found</div>
+        <div class="value">{{ metrics.total_vulns }}</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Total Cost</div>
+        <div class="value">${{ "%.4f"|format(metrics.total_cost_usd) }}</div>
+        <div class="sub">USD</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Avg Duration</div>
+        <div class="value">{{ "%.1f"|format(metrics.avg_duration_seconds) }}s</div>
+      </div>
+    </div>
+
+    <!-- Trigger Scan Form -->
+    <div class="scan-form">
+      <h2>New Scan</h2>
+      <form method="POST" action="/scan">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="repo">Repository path or GitHub URL</label>
+            <input id="repo" name="repo" type="text" placeholder="https://github.com/owner/repo or /path/to/code" required />
+          </div>
+          <div class="form-check">
+            <input id="patches" name="patches" type="checkbox" value="true" />
+            <label for="patches">Generate patches</label>
+          </div>
+          <button class="btn" type="submit">Scan</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Scan History -->
+    <section>
+      <h2>Recent Scans</h2>
+      {% if scans %}
+      <table>
+        <thead>
+          <tr>
+            <th>Scan ID</th>
+            <th>Repository</th>
+            <th>Vulns</th>
+            <th>Cost</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for scan in scans %}
+          <tr>
+            <td class="scan-id">{{ scan.scan_id }}</td>
+            <td>{{ scan.repo_path }}</td>
+            <td class="vuln-count {% if scan.vuln_count > 0 %}vuln-high{% else %}vuln-zero{% endif %}">
+              {{ scan.vuln_count }}
+            </td>
+            <td class="cost">${{ "%.4f"|format(scan.cost_usd) }}</td>
+            <td>{{ scan.timestamp }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty-state">
+        <p>No scans yet.</p>
+        <p>Trigger a scan above or via CLI: <code>swift scan --repo &lt;path&gt;</code></p>
+      </div>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>
