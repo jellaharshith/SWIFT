@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from agent.github_cloner import clone_repo, is_github_url
 from agent.orchestrator import generate_patches, scan_codebase
 from output.formatters import format_output
 
@@ -16,7 +17,7 @@ def cli() -> None:
 
 
 @cli.command()
-@click.option("--repo", required=True, help="Path to repository to scan.")
+@click.option("--repo", required=True, help="Local path or GitHub URL to scan.")
 @click.option(
     "--output",
     default="json",
@@ -36,16 +37,24 @@ def scan(repo: str, output: str, gen_patches: bool, out_file: str | None) -> Non
     """Scan a repository for security vulnerabilities.
 
     Runs the full triage → Haiku → Sonnet pipeline. Only findings with
-    ≥95% confidence are reported.
+    ≥95% confidence are reported. Accepts a local path or a GitHub URL.
     """
-    repo_path = str(Path(repo).resolve())
-    click.echo(f"Scanning {repo_path} ...", err=True)
-
+    cleanup = None
     try:
+        if is_github_url(repo):
+            click.echo(f"Cloning {repo} ...", err=True)
+            repo_path, cleanup = clone_repo(repo)
+        else:
+            repo_path = str(Path(repo).resolve())
+
+        click.echo(f"Scanning {repo_path} ...", err=True)
         result = scan_codebase(repo_path, generate_patches_flag=gen_patches)
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
+    finally:
+        if cleanup is not None:
+            cleanup()
 
     click.echo(
         f"Found {len(result.vulnerabilities)} vulnerabilities "
@@ -62,7 +71,7 @@ def scan(repo: str, output: str, gen_patches: bool, out_file: str | None) -> Non
 
 
 @cli.command()
-@click.option("--repo", required=True, help="Path to repository to scan and patch.")
+@click.option("--repo", required=True, help="Local path or GitHub URL to scan and patch.")
 @click.option(
     "--output",
     default="json",
@@ -75,15 +84,24 @@ def patch(repo: str, output: str, out_file: str | None) -> None:
     """Scan repository and auto-generate patches for all findings.
 
     Each patch is validated in a Docker sandbox (--network=none, read-only FS).
+    Accepts a local path or a GitHub URL.
     """
-    repo_path = str(Path(repo).resolve())
-    click.echo(f"Scanning + patching {repo_path} ...", err=True)
-
+    cleanup = None
     try:
+        if is_github_url(repo):
+            click.echo(f"Cloning {repo} ...", err=True)
+            repo_path, cleanup = clone_repo(repo)
+        else:
+            repo_path = str(Path(repo).resolve())
+
+        click.echo(f"Scanning + patching {repo_path} ...", err=True)
         result = scan_codebase(repo_path, generate_patches_flag=True)
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
+    finally:
+        if cleanup is not None:
+            cleanup()
 
     click.echo(
         f"Found {len(result.vulnerabilities)} vulnerabilities, "
