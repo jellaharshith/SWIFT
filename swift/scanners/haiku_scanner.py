@@ -50,12 +50,20 @@ class HaikuTriageScanner:
     def _build_prompt(
         self, file_path: str, source_code: str, flagged_lines: Set[int]
     ) -> str:
+        import os as _os
         lines_str = ", ".join(str(n) for n in sorted(flagged_lines))
+        ext = _os.path.splitext(file_path)[1].lower()
+        lang = {
+            ".py": "python", ".ts": "typescript", ".tsx": "typescript",
+            ".js": "javascript", ".jsx": "javascript",
+        }.get(ext, "code")
         return (
             f"You are a security code reviewer analyzing {file_path}.\n"
             f"These lines were flagged by static analysis: {lines_str}\n\n"
-            f"Source code:\n```python\n{source_code}\n```\n\n"
-            "List only the line numbers that contain real security vulnerabilities. "
+            f"Source code:\n```{lang}\n{source_code}\n```\n\n"
+            "List only the line numbers that contain real security vulnerabilities "
+            "(e.g. XSS, prompt injection, CORS misconfiguration, hardcoded secrets, "
+            "command injection, open redirect, error leakage). "
             "Respond with line numbers only, comma-separated. "
             "If none are suspicious, say 'none'."
         )

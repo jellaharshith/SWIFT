@@ -1,0 +1,43 @@
+{
+  "scan": {
+    "id": "SCAN-130f4de7",
+    "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/swift_clone_9z6jjw0s",
+    "duration_seconds": 57.202193749835715,
+    "total_cost_usd": 0.0,
+    "timestamp": "2026-04-19T07:59:39.606655+00:00"
+  },
+  "summary": {
+    "files_scanned": 4,
+    "vulnerabilities_found": 1,
+    "by_severity": {
+      "critical": 0,
+      "high": 1,
+      "medium": 0,
+      "low": 0
+    },
+    "patches_generated": 1
+  },
+  "vulnerabilities": [
+    {
+      "id": "SWIFT-001",
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/swift_clone_9z6jjw0s/src/components/ai/AIChatMessages.tsx",
+      "line_number": 58,
+      "vuln_type": "other",
+      "description": "Cross-Site Scripting (XSS) vulnerability via unsanitized user-controlled content rendered with dangerouslySetInnerHTML. The formatMarkdown function transforms msg.content (which comes from AI/external source) into HTML and injects it directly into the DOM without sanitization. Malicious content like **<img src=x onerror=alert(1)>** or inline event handlers within markdown constructs would pass through the regex replacements and execute as JavaScript in the browser.",
+      "confidence": 0.95,
+      "severity": "HIGH",
+      "code_snippet": "dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.content) }}"
+    }
+  ],
+  "patches": [
+    {
+      "id": "PATCH-001",
+      "vuln_id": "SWIFT-001",
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/swift_clone_9z6jjw0s/src/components/ai/AIChatMessages.tsx",
+      "original_code": "dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.content) }}",
+      "patched_code": "dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatMarkdown(msg.content)) }}",
+      "diff": "--- a//var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/swift_clone_9z6jjw0s/src/components/ai/AIChatMessages.tsx\n+++ b//var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/swift_clone_9z6jjw0s/src/components/ai/AIChatMessages.tsx\n@@ -1 +1 @@\n-dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.content) }}+dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(formatMarkdown(msg.content)) }}",
+      "confidence": 0.95
+    }
+  ]
+}
