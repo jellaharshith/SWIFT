@@ -40,8 +40,11 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
       - name: Store ANTHROPIC_API_KEY in Secrets Manager
-        if: secrets.ANTHROPIC_API_KEY != ''
         run: |
+          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "Skipping secret storage - ANTHROPIC_API_KEY not configured"
+            exit 0
+          fi
           aws secretsmanager create-secret \
             --name swift/anthropic-api-key \
             --secret-string "${{ secrets.ANTHROPIC_API_KEY }}" \
