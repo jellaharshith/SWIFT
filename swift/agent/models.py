@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -15,6 +15,9 @@ class Vulnerability:
     confidence: float  # 0.0–1.0, NOT percent
     severity: str      # CRITICAL, HIGH, MEDIUM, LOW
     code_snippet: str
+    cwe_id: Optional[str] = None
+    exploit_description: Optional[str] = None
+    remediation: Optional[str] = None
 
 
 @dataclass
@@ -25,6 +28,22 @@ class Patch:
     original_code: str
     patched_code: str
     diff: str
+    confidence: float
+    reasoning: Optional[str] = None
+    sandbox_tested: bool = False
+    test_passed: Optional[bool] = None
+    test_logs: Optional[str] = None
+
+
+@dataclass
+class ExploitChain:
+    chain_id: str
+    name: str
+    vulnerability_ids: List[str]
+    attack_path: str
+    entry_point: str
+    impact: str
+    severity: str
     confidence: float
 
 
@@ -38,6 +57,7 @@ class ScanResult:
     duration_seconds: float
     total_cost_usd: float
     timestamp: str
+    exploit_chains: List[ExploitChain] = field(default_factory=list)
 
 
 @dataclass

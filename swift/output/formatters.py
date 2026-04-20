@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from typing import Dict
 
 from agent.models import ScanResult
 
@@ -77,6 +78,19 @@ class JSONFormatter:
                 }
                 for p in result.patches
             ],
+            "exploit_chains": [
+                {
+                    "chain_id": c.chain_id,
+                    "name": c.name,
+                    "vulnerability_ids": c.vulnerability_ids,
+                    "attack_path": c.attack_path,
+                    "entry_point": c.entry_point,
+                    "impact": c.impact,
+                    "severity": c.severity,
+                    "confidence": c.confidence,
+                }
+                for c in result.exploit_chains
+            ],
         }
 
         return json.dumps(payload, indent=2)
@@ -142,6 +156,27 @@ class MarkdownFormatter:
         else:
             lines.append("*No vulnerabilities found.*")
             lines.append("")
+
+        # --- Exploit Chains ---
+        if result.exploit_chains:
+            lines.append("## Exploit Chains")
+            lines.append("")
+            for chain in result.exploit_chains:
+                lines.append(f"### {chain.name} [{chain.severity}]")
+                lines.append("")
+                lines.append(f"- **Chain ID:** {chain.chain_id}")
+                lines.append(f"- **Entry Point:** {chain.entry_point}")
+                lines.append(f"- **Impact:** {chain.impact}")
+                confidence_pct = int(round(chain.confidence * 100))
+                lines.append(f"- **Confidence:** {confidence_pct}%")
+                lines.append(f"- **Vulnerabilities involved:** {', '.join(chain.vulnerability_ids)}")
+                lines.append("")
+                lines.append("**Attack Path:**")
+                lines.append("")
+                for line in chain.attack_path.split("\n"):
+                    if line.strip():
+                        lines.append(f"  {line}")
+                lines.append("")
 
         # --- Patches (omitted when empty) ---
         if result.patches:

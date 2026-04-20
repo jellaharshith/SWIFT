@@ -11,13 +11,13 @@ from log.logger import get_logger
 logger = get_logger()
 
 _PROMPT_TEMPLATE = """\
-You are an expert security analyst. Analyze the following Python code for security vulnerabilities.
+You are an expert security analyst. Analyze the following {language} code for security vulnerabilities.
 
 File: {file_path}
 Line: {line_number}
 
 Source code:
-```python
+```{language}
 {source_code}
 ```
 
@@ -27,10 +27,13 @@ Respond with ONLY valid JSON (no markdown, no explanation):
   "vuln_type": "<sql_injection|command_injection|hardcoded_secret|weak_crypto|unsafe_deserialization|other>",
   "description": "<precise description of the vulnerability>",
   "severity": "<critical|high|medium|low>",
-  "code_snippet": "<the exact vulnerable line or lines>"
+  "code_snippet": "<the exact vulnerable line or lines>",
+  "cwe_id": "<optional CWE ID e.g. CWE-89>",
+  "exploit_description": "<optional: how an attacker could exploit this>",
+  "remediation": "<optional: how to fix this vulnerability>"
 }}
 
-If no vulnerability, return: {{"confidence": 0.0, "vuln_type": "none", "description": "clean", "severity": "low", "code_snippet": ""}}
+If no vulnerability, return: {{"confidence": 0.0, "vuln_type": "none", "description": "clean", "severity": "low", "code_snippet": "", "cwe_id": null, "exploit_description": null, "remediation": null}}
 """
 
 
@@ -66,13 +69,35 @@ class SonnetAnalysisScanner:
         Returns:
             Vulnerability if confidence >= 0.95, else None.
         """
+        language = self._detect_language(file_path)
         prompt = _PROMPT_TEMPLATE.format(
             file_path=file_path,
             line_number=line_number,
             source_code=source_code,
+            language=language,
         )
         raw = self._call_api(prompt)
         return self._parse_response(raw, file_path, line_number)
+
+    @staticmethod
+    def _detect_language(file_path: str) -> str:
+        """Detect language from file extension.
+
+        Args:
+            file_path: Path to analyze.
+
+        Returns:
+            Language identifier for code block (python, javascript, typescript, or 'code').
+        """
+        import os as _os
+        ext = _os.path.splitext(file_path)[1].lower()
+        return {
+            ".py": "python",
+            ".ts": "typescript",
+            ".tsx": "typescript",
+            ".js": "javascript",
+            ".jsx": "javascript",
+        }.get(ext, "code")
 
     def _call_api(self, prompt: str) -> str:
         response = self._client.messages.create(
@@ -113,4 +138,7 @@ class SonnetAnalysisScanner:
             confidence=float(confidence),
             severity=data.get("severity", "medium").upper(),
             code_snippet=data.get("code_snippet", ""),
+            cwe_id=data.get("cwe_id"),
+            exploit_description=data.get("exploit_description"),
+            remediation=data.get("remediation"),
         )
