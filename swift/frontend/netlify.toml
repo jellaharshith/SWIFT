@@ -1,0 +1,9 @@
+[build]
+  base = "frontend"
+  command = "sed 's|%%SWIFT_API_URL%%|'\"$SWIFT_API_URL\"'|g' index.html > /tmp/_swift_index.html && mv /tmp/_swift_index.html index.html"
+  publish = "."
+
+[build.environment]
+  # Set SWIFT_API_URL in Netlify dashboard → Site settings → Environment variables
+  # Example: https://your-tunnel-name.trycloudflare.com
+  SWIFT_API_URL = ""
