@@ -39,37 +39,17 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Store ANTHROPIC_API_KEY in Secrets Manager
-        run: |
-          if [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
-            echo "Skipping secret storage - ANTHROPIC_API_KEY not configured"
-            exit 0
-          fi
-          aws secretsmanager create-secret \
-            --name swift/anthropic-api-key \
-            --secret-string "${{ secrets.ANTHROPIC_API_KEY }}" \
-            --region us-east-2 2>/dev/null || \
-          aws secretsmanager update-secret \
-            --secret-id swift/anthropic-api-key \
-            --secret-string "${{ secrets.ANTHROPIC_API_KEY }}" \
-            --region us-east-2
-
       - name: Deploy to App Runner
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
+          API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # Get existing service ARN if it exists
           SERVICE_ARN=$(aws apprunner list-services --region us-east-2 --query "ServiceSummaryList[?ServiceName=='swift-scanner'].ServiceArn" --output text 2>/dev/null || echo "")
 
-          # Build source config with secret if available
-          SECRET_ARN=$(aws secretsmanager describe-secret --secret-id swift/anthropic-api-key --region us-east-2 --query ARN --output text 2>/dev/null || echo "")
-
-          if [ -n "$SECRET_ARN" ]; then
-            SOURCE_CONFIG="ImageRepository={ImageIdentifier=${ECR_REGISTRY}/swift-scanner:${IMAGE_TAG},ImageRepositoryType=ECR,ImageConfiguration={Port=8000,RuntimeEnvironmentVariables={SWIFT_LOG_LEVEL=INFO,SWIFT_CONFIDENCE_THRESHOLD=0.95,PYTHONPATH=/app,SWIFT_ENV=apprunner},RuntimeEnvironmentSecrets={ANTHROPIC_API_KEY=${SECRET_ARN}}}}"
-          else
-            SOURCE_CONFIG="ImageRepository={ImageIdentifier=${ECR_REGISTRY}/swift-scanner:${IMAGE_TAG},ImageRepositoryType=ECR,ImageConfiguration={Port=8000,RuntimeEnvironmentVariables={SWIFT_LOG_LEVEL=INFO,SWIFT_CONFIDENCE_THRESHOLD=0.95,PYTHONPATH=/app,SWIFT_ENV=apprunner}}}"
-          fi
+          # Source config: pass API key + other env vars
+          SOURCE_CONFIG="ImageRepository={ImageIdentifier=${ECR_REGISTRY}/swift-scanner:${IMAGE_TAG},ImageRepositoryType=ECR,ImageConfiguration={Port=8000,RuntimeEnvironmentVariables={ANTHROPIC_API_KEY=${API_KEY},SWIFT_LOG_LEVEL=INFO,SWIFT_CONFIDENCE_THRESHOLD=0.95,PYTHONPATH=/app,SWIFT_ENV=apprunner}}}"
 
           # Update or create service
           if [ -n "$SERVICE_ARN" ]; then
