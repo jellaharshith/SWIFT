@@ -24,4 +24,4 @@ RUN mkdir -p /data && chmod 777 /data
 EXPOSE 8000
 
 # Start uvicorn with error output
-CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info"]
+CMD ["sh", "-c", "uvicorn web.app:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info"]
