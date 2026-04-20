@@ -3,7 +3,7 @@
 # Prerequisites: AWS CLI configured, Docker running, ANTHROPIC_API_KEY set
 set -euo pipefail
 
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-us-east-2}"
 APP_NAME="swift-scanner"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 ECR_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${APP_NAME}"
