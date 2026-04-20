@@ -25,7 +25,13 @@ def test_create_engine_uses_database_url_when_set():
 
 
 def test_create_engine_falls_back_to_sqlite_without_database_url():
-    """Without DATABASE_URL, engine should use SQLite."""
-    with patch.object(storage_mod, "_DATABASE_URL", None):
-        engine, SessionLocal = storage_mod.create_engine_and_session()
-    assert "sqlite" in str(engine.url)
+    """Without DATABASE_URL, engine falls back to SQLite with check_same_thread disabled."""
+    mock_engine = MagicMock()
+    with patch.object(storage_mod, "_DATABASE_URL", None), \
+         patch("web.storage.create_engine", return_value=mock_engine) as mock_ce:
+        engine, session_local = storage_mod.create_engine_and_session()
+
+    call_args = mock_ce.call_args
+    assert "sqlite" in call_args[0][0]
+    assert call_args[1].get("connect_args") == {"check_same_thread": False}
+    assert engine is mock_engine
