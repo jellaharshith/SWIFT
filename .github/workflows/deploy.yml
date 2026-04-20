@@ -57,6 +57,7 @@ jobs:
             aws apprunner update-service \
               --service-arn "$SERVICE_ARN" \
               --source-configuration "$SOURCE_CONFIG" \
+              --health-check-configuration "Protocol=HTTP,Path=/,Interval=10,Timeout=5,HealthyThreshold=2,UnhealthyThreshold=3" \
               --region us-east-2
           else
             echo "Creating new service"
@@ -64,5 +65,6 @@ jobs:
               --service-name swift-scanner \
               --source-configuration "$SOURCE_CONFIG" \
               --instance-configuration "Cpu=1 vCPU,Memory=2 GB" \
+              --health-check-configuration "Protocol=HTTP,Path=/,Interval=10,Timeout=5,HealthyThreshold=2,UnhealthyThreshold=3" \
               --region us-east-2
           fi
