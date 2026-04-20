@@ -7,6 +7,8 @@
 - **Finds** security flaws in code (SQL injection, command injection, XSS, path traversal, and more) across Python, TypeScript, and JavaScript codebases
 - **Verifies** every finding is real using a 95% confidence threshold — false positives are suppressed, not reported
 - **Fixes** vulnerabilities automatically by generating Docker-sandbox-tested patches and unified diffs
+- **Scans GitHub repos directly** — provide a repo URL or local path
+- **Reports via API** — JSON endpoints for CI/CD integration, or Markdown for human review
 
 ## Architecture
 
@@ -39,6 +41,44 @@ Input (local path or GitHub URL)
 Output (JSON for APIs / Markdown for humans)
 ```
 
+## New Features (Phase 2)
+
+### 🔗 GitHub Integration
+Scan public and private GitHub repositories directly — no cloning required.
+
+```bash
+# Scan a GitHub repo
+python main.py scan --repo https://github.com/owner/repo --output markdown
+
+# Generate patches for GitHub repo
+python main.py patch --repo https://github.com/owner/repo --output json
+```
+
+### 🌐 Web Dashboard & API
+FastAPI-powered dashboard and REST API for scan management, results viewing, and metrics.
+
+```bash
+# Run web layer
+uvicorn web.app:app --reload --port 8000
+# Open http://localhost:8000/dashboard
+```
+
+Features:
+- **Dashboard:** Real-time scan progress, vulnerability list, patch viewer
+- **OAuth:** GitHub authentication for authenticated scans
+- **REST API:** Programmatic access to scan results and history
+- **Scan History:** View past scans, download JSON/Markdown reports
+
+### 📊 Multi-Language Support
+Scanner now handles Python, TypeScript, and JavaScript vulnerabilities.
+
+### ☁️ AWS Deployment Ready
+One-command deployment to AWS App Runner with auto-scaling.
+
+```bash
+./aws-deploy.sh
+```
+
 ## Installation
 
 ### Prerequisites
@@ -61,34 +101,78 @@ cp .env.example .env
 
 ## Quick Start
 
+### CLI Commands
+
+**Scan a repository:**
 ```bash
-# Scan current directory
+# Local scan (JSON output)
 python main.py scan --repo . --output json
 
-# Scan a GitHub repository
+# GitHub repo scan (Markdown report)
 python main.py scan --repo https://github.com/owner/repo --output markdown
 
-# Scan and automatically generate patches
-python main.py patch --repo . --output json
-
-# Validate a specific patch
-python main.py validate --patch-id PATCH-001
+# Scan with patches
+python main.py scan --repo . --patches --output json --out-file results.json
 ```
 
-## Web Dashboard
+**Generate patches:**
+```bash
+# Full scan + auto-patch (generates 3 candidates, picks best)
+python main.py patch --repo . --output json
 
-SWIFT includes a FastAPI web layer with a browser dashboard for reviewing scan results and managing OAuth-authenticated GitHub scans.
+# GitHub repo with patches
+python main.py patch --repo https://github.com/owner/repo --output markdown
+```
 
+## Web Dashboard & REST API
+
+### Dashboard UI
+
+Start the web server:
 ```bash
 uvicorn web.app:app --reload --port 8000
 # Open http://localhost:8000/dashboard
 ```
 
-The dashboard shows:
-- Active and past scan results
-- Vulnerability details with confidence scores
-- Generated patches and their test status
-- Scan cost and performance metrics
+Dashboard features:
+- **Scan Input:** Paste GitHub repo URL or select from saved repos
+- **Live Progress:** Real-time pipeline visualization (Triage → Haiku → Sonnet → Patching)
+- **Results View:** Vulnerabilities with confidence scores, code snippets, and patches
+- **Report Download:** Export as JSON or Markdown
+- **Scan History:** Browse past scans with filters and metrics
+- **GitHub OAuth:** Authenticate to scan private repos
+
+### REST API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Health check (`{"status": "ok"}`) |
+| `/scans` | GET | List past scans (paginated) |
+| `/scan/{scan_id}` | GET | Get scan details |
+| `/scan/{scan_id}/report/json` | GET | Download JSON report |
+| `/scan/{scan_id}/report/markdown` | GET | Download Markdown report |
+| `/scan` | POST | Submit new scan (async) |
+| `/scan/{scan_id}/status` | GET | Poll scan status |
+| `/metrics` | GET | Aggregate metrics (cost, speed, vuln count) |
+| `/auth/github` | GET | GitHub OAuth redirect |
+| `/auth/callback` | GET | GitHub OAuth callback |
+
+**Example: Submit scan via API**
+```bash
+curl -X POST http://localhost:8000/scan \
+  -H "Content-Type: application/json" \
+  -d '{"repo": "https://github.com/owner/repo", "patches": true}'
+```
+
+**Example: Poll scan status**
+```bash
+curl http://localhost:8000/scan/{scan_id}/status
+```
+
+**Example: Download JSON report**
+```bash
+curl http://localhost:8000/scan/{scan_id}/report/json > report.json
+```
 
 ## Configuration
 
@@ -101,29 +185,135 @@ The dashboard shows:
 | `GITHUB_CLIENT_ID` | No | GitHub OAuth app client ID (for web dashboard) |
 | `GITHUB_CLIENT_SECRET` | No | GitHub OAuth app client secret (for web dashboard) |
 
-## Deploy to AWS
+## CI/CD Integration
 
-SWIFT is designed to run on AWS App Runner via Docker + ECR.
+### GitHub Actions
 
-**Prerequisites:** AWS CLI configured, Docker installed
+Add to `.github/workflows/security-scan.yml`:
+
+```yaml
+name: SWIFT Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run SWIFT scan
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          pip install -r requirement.txt
+          python main.py scan --repo . --output markdown --out-file report.md
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: report.md
+```
+
+### API Integration (for hosted SWIFT)
 
 ```bash
-# Build and push image, create App Runner service
+# Submit scan via REST API
+SCAN_ID=$(curl -s -X POST https://your-swift-instance/scan \
+  -H "Content-Type: application/json" \
+  -d '{"repo": "'$GITHUB_SERVER_URL'/'$GITHUB_REPOSITORY'", "patches": false}' \
+  | jq -r '.scan_id')
+
+# Poll until done
+while true; do
+  STATUS=$(curl -s https://your-swift-instance/scan/$SCAN_ID/status)
+  if [ "$(echo $STATUS | jq -r '.status')" = "done" ]; then
+    break
+  fi
+  sleep 5
+done
+
+# Download report
+curl https://your-swift-instance/scan/$SCAN_ID/report/markdown > report.md
+```
+
+## Deploy to AWS App Runner
+
+SWIFT is production-ready for AWS deployment with auto-scaling, HTTPS, and Secrets Manager integration.
+
+### Prerequisites
+- AWS Account with credentials configured (`aws configure`)
+- Docker installed locally
+- `ANTHROPIC_API_KEY` (Anthropic API key)
+
+### One-Command Deployment
+
+```bash
 ./aws-deploy.sh
 ```
 
-After deployment, open the AWS App Runner console to find your service URL. The `ANTHROPIC_API_KEY` is stored in AWS Secrets Manager under `swift/anthropic-api-key` and wired in automatically by the deploy script.
+Script handles:
+1. ECR repository setup
+2. Docker image build + push
+3. AWS Secrets Manager for API key
+4. IAM role creation
+5. Prints deployment command
 
-## Cost
+### Manual App Runner Setup (if needed)
 
-| Step | Model | Cost | Speed |
+After running `aws-deploy.sh`, create the service in AWS Console:
+
+1. Go to **AWS App Runner** (us-east-1)
+2. Click **Create Service**
+3. **Source:** Container registry → Amazon ECR
+4. **Image URI:** `<account-id>.dkr.ecr.us-east-1.amazonaws.com/swift-scanner:latest`
+5. **ECR Access Role:** `AppRunnerECRAccessRole` (created by script)
+6. **Port:** `8000`
+7. **Environment Variables:**
+   - `SWIFT_LOG_LEVEL=INFO`
+   - `SWIFT_CONFIDENCE_THRESHOLD=0.95`
+   - `PYTHONPATH=/app`
+8. **Secrets (from Secrets Manager):**
+   - `ANTHROPIC_API_KEY` → select the secret created by deploy script
+9. **Instance:** 1 vCPU, 2 GB RAM
+10. Click **Create**
+
+### After Deployment
+
+App Runner provides:
+- **Auto-scaling** — scales based on traffic
+- **HTTPS** — automatic certificate
+- **Health checks** — automatic restarts
+- **Logs** — CloudWatch integration
+- **Monitoring** — CloudWatch metrics
+
+Test the deployment:
+```bash
+curl https://your-service-url/
+# {"status": "ok", "service": "SWIFT Scanner"}
+
+curl https://your-service-url/dashboard
+# Opens web UI
+```
+
+### Cost Breakdown
+- **App Runner Infrastructure:** ~$1/day for 1 vCPU, 2 GB (idle billing minimal)
+- **AWS Secrets Manager:** $0.40/secret/month
+- **API calls:** ~<$2 per full scan
+
+## Scan Cost Model
+
+| Step | Model | Cost per File | Speed |
 |---|---|---|---|
-| Regex Triage | None | Free | <1ms/file |
-| Haiku Scanner | Claude Haiku | ~$0.05/file | ~50ms/file |
-| Sonnet Analysis | Claude Sonnet | ~$0.50/location | ~3s/location |
-| **Full scan target** | — | **<$2 total** | — |
+| Regex Triage | None | Free | <1ms |
+| Haiku Scanner | Claude Haiku | ~$0.05 | ~50ms |
+| Sonnet Analysis | Claude Sonnet | ~$0.50/location | ~3s |
+| **Target per scan** | — | **<$2 total** | — |
 
-Cost is kept low by only running Sonnet on locations already flagged by Haiku. Most files never reach the expensive step.
+Cost optimization: Only runs Sonnet on locations flagged by Haiku. Most files skip expensive steps.
 
 ## Testing
 
