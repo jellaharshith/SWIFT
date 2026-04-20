@@ -1,0 +1,13 @@
+# fly.toml — SWIFT scanner (CLI tool, no HTTP service)
+# Run scans via: flyctl machine run . --env ANTHROPIC_API_KEY=<key> -- scan --repo <url> --output json
+
+app = 'swift-scanner'
+primary_region = 'iad'
+
+[build]
+  dockerfile = "Dockerfile"
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1

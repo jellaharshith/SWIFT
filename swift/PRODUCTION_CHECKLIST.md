@@ -4,7 +4,7 @@ Use this checklist before every deployment to production.
 
 ## Environment Variables
 
-- [ ] `ANTHROPIC_API_KEY` set (use AWS Secrets Manager in production — never hardcode)
+- [ ] `ANTHROPIC_API_KEY` set (use environment variables or a secrets manager — never hardcode)
 - [ ] `SWIFT_LOG_LEVEL=INFO` (not `DEBUG` — debug logs include raw API payloads)
 - [ ] `SWIFT_CONFIDENCE_THRESHOLD=0.95` (never lower this — it is the core trust guarantee)
 - [ ] `SWIFT_DB_PATH` points to persistent storage (not a container-local temp path)
@@ -16,14 +16,6 @@ Use this checklist before every deployment to production.
 - [ ] `docker build -t swift-scanner:latest .` succeeds without errors
 - [ ] `docker run --env ANTHROPIC_API_KEY=$KEY swift-scanner:latest scan --repo . --output json` runs without error
 - [ ] Image size is reasonable (< 1GB)
-
-## AWS App Runner
-
-- [ ] ECR repository created: `swift-scanner`
-- [ ] Docker image built and pushed to ECR
-- [ ] `ANTHROPIC_API_KEY` stored in AWS Secrets Manager under: `swift/anthropic-api-key`
-- [ ] App Runner service created with the secret ARN wired in via environment variable
-- [ ] App Runner service URL is accessible from the internet
 
 ## Smoke Tests
 
@@ -40,7 +32,7 @@ Run these against the live deployment immediately after deploying:
 - [ ] `.env` is listed in `.gitignore` and has never been committed
 - [ ] No hardcoded API keys anywhere in source code (`grep -r "sk-ant" .` returns nothing)
 - [ ] Docker sandbox patch testing uses `--network=none` (verify in `sandbox/` code)
-- [ ] HTTPS is enabled on the App Runner endpoint (App Runner provides this automatically)
+- [ ] HTTPS is enabled on the deployment endpoint
 
 ## Tests
 

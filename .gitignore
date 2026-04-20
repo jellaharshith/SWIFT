@@ -1,2 +1,20 @@
 SWIFT DOCS/
 Reports PDF - Security Gap/
+.env
+**/.env
+rootkey.csv
+*.csv
+__pycache__/
+**/__pycache__/
+*.pyc
+*.db
+*.log
+.DS_Store
+**/.DS_Store
+.claude/
+**/.claude/
+Obsidian - SWIFT/
+docs/superpowers/
+**/docs/superpowers/
+*.pdf
+

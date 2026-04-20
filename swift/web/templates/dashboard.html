@@ -3,124 +3,1866 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SWIFT Scanner — Dashboard</title>
+  <title>SWIFT — Security Scanner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
   <style>
+    :root {
+      --bg: #080b0f;
+      --bg2: #0d1117;
+      --surface: #111820;
+      --border: #1a2332;
+      --border-bright: #243447;
+      --accent-green: #00ff88;
+      --accent-green-dim: rgba(0,255,136,0.12);
+      --accent-green-glow: rgba(0,255,136,0.25);
+      --accent-blue: #0ea5e9;
+      --accent-blue-dim: rgba(14,165,233,0.12);
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #4a5568;
+      --critical: #ef4444;
+      --critical-dim: rgba(239,68,68,0.12);
+      --high: #f97316;
+      --high-dim: rgba(249,115,22,0.12);
+      --medium: #eab308;
+      --medium-dim: rgba(234,179,8,0.12);
+      --low: #22c55e;
+      --low-dim: rgba(34,197,94,0.12);
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Inter', sans-serif;
+    }
+
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
-    header { background: #1a1d27; border-bottom: 1px solid #2d3748; padding: 1rem 2rem; display: flex; align-items: center; gap: 0.75rem; }
-    header h1 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
-    header .badge { background: #3b82f6; color: #fff; font-size: 0.65rem; padding: 0.2rem 0.5rem; border-radius: 999px; font-weight: 600; text-transform: uppercase; }
-    main { max-width: 1100px; margin: 2rem auto; padding: 0 1.5rem; }
-    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-    .metric-card { background: #1a1d27; border: 1px solid #2d3748; border-radius: 0.5rem; padding: 1.25rem 1.5rem; }
-    .metric-card .label { font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
-    .metric-card .value { font-size: 2rem; font-weight: 700; color: #f8fafc; }
-    .metric-card .sub { font-size: 0.75rem; color: #64748b; margin-top: 0.25rem; }
-    section h2 { font-size: 1rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1rem; }
-    .scan-form { background: #1a1d27; border: 1px solid #2d3748; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 2rem; }
-    .scan-form h2 { margin-bottom: 1rem; }
-    .form-row { display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
-    .form-group { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; min-width: 240px; }
-    .form-group label { font-size: 0.8rem; color: #94a3b8; }
-    .form-group input { background: #0f1117; border: 1px solid #374151; border-radius: 0.375rem; color: #e2e8f0; padding: 0.6rem 0.75rem; font-size: 0.875rem; outline: none; }
-    .form-group input:focus { border-color: #3b82f6; }
-    .form-check { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: #94a3b8; padding-bottom: 0.1rem; }
-    .btn { background: #3b82f6; color: #fff; border: none; border-radius: 0.375rem; padding: 0.6rem 1.25rem; font-size: 0.875rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    .btn:hover { background: #2563eb; }
-    table { width: 100%; border-collapse: collapse; background: #1a1d27; border: 1px solid #2d3748; border-radius: 0.5rem; overflow: hidden; }
-    th { background: #111827; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #2d3748; }
-    td { padding: 0.75rem 1rem; font-size: 0.875rem; border-bottom: 1px solid #1e2433; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+
+    /* ── Header ── */
+    header {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo {
+      font-family: var(--mono);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.1em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .logo-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--accent-green); }
+      50% { opacity: 0.5; box-shadow: 0 0 4px var(--accent-green); }
+    }
+
+    .logo-sub {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .header-metrics {
+      display: flex;
+      gap: 2rem;
+      align-items: center;
+    }
+
+    .hm-item {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+    }
+
+    .hm-label {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-family: var(--mono);
+    }
+
+    .hm-value {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    /* ── Main layout ── */
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    /* ── Phase panels ── */
+    .phase { display: none; }
+    .phase.active { display: block; }
+
+    /* ══════════════════════════════════════════════
+       PHASE 1 — INPUT
+    ══════════════════════════════════════════════ */
+    #phase-input {
+      max-width: 680px;
+      margin: 4rem auto 0;
+    }
+
+    .input-eyebrow {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--accent-green);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      margin-bottom: 1rem;
+    }
+
+    .input-title {
+      font-size: 2.25rem;
+      font-weight: 700;
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+    }
+
+    .input-title span {
+      color: var(--accent-green);
+    }
+
+    .input-desc {
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      margin-bottom: 2.5rem;
+    }
+
+    .input-group {
+      position: relative;
+      margin-bottom: 1rem;
+    }
+
+    .input-label {
+      display: block;
+      font-size: 0.75rem;
+      font-family: var(--mono);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
+    }
+
+    #repo-url {
+      width: 100%;
+      background: var(--bg2);
+      border: 1px solid var(--border-bright);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-family: var(--mono);
+      font-size: 0.875rem;
+      padding: 0.875rem 1rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    #repo-url:focus {
+      border-color: var(--accent-green);
+      box-shadow: 0 0 0 3px var(--accent-green-glow);
+    }
+
+    #repo-url::placeholder { color: var(--text-muted); }
+
+    /* Suggestions dropdown */
+    #repo-suggestions {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 50;
+      display: none;
+    }
+
+    #repo-suggestions.open { display: block; }
+
+    .suggestion-item {
+      padding: 0.6rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+
+    .suggestion-item:last-child { border-bottom: none; }
+    .suggestion-item:hover { background: var(--accent-green-dim); color: var(--accent-green); }
+
+    .suggestion-link {
+      padding: 0.6rem 1rem;
+      font-size: 0.8rem;
+      color: var(--accent-blue);
+      cursor: pointer;
+      text-decoration: none;
+      display: block;
+    }
+
+    /* Toggle */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 42px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border-bright);
+      border-radius: 24px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      top: 3px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent-green-dim); border: 1px solid var(--accent-green); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); background: var(--accent-green); }
+
+    .toggle-label {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .toggle-label strong { color: var(--text-primary); }
+
+    .toggle-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Scan button */
+    #btn-scan {
+      width: 100%;
+      background: var(--accent-green);
+      color: #080b0f;
+      border: none;
+      border-radius: 6px;
+      padding: 0.9rem 1.5rem;
+      font-family: var(--mono);
+      font-size: 0.875rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    #btn-scan:hover { opacity: 0.9; box-shadow: 0 0 20px var(--accent-green-glow); }
+    #btn-scan:active { opacity: 0.8; }
+
+    .btn-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 14px;
+      background: #080b0f;
+      animation: blink 1s step-end infinite;
+    }
+
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    .scan-error {
+      margin-top: 0.75rem;
+      padding: 0.6rem 0.875rem;
+      background: var(--critical-dim);
+      border: 1px solid var(--critical);
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--critical);
+      display: none;
+    }
+
+    .scan-error.visible { display: block; }
+
+    /* ══════════════════════════════════════════════
+       PHASE 2 — LOADING
+    ══════════════════════════════════════════════ */
+    #phase-loading {
+      max-width: 680px;
+      margin: 3rem auto 0;
+    }
+
+    .loading-repo {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .loading-repo span {
+      color: var(--accent-green);
+    }
+
+    .loading-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+    }
+
+    /* Stages */
+    .stages { margin-bottom: 2rem; }
+
+    .stage-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.875rem 1rem;
+      border-left: 2px solid var(--border);
+      margin-bottom: 0.5rem;
+      border-radius: 0 6px 6px 0;
+      background: var(--bg2);
+      transition: border-color 0.3s, background 0.3s;
+    }
+
+    .stage-row.active {
+      border-left-color: var(--accent-green);
+      background: var(--accent-green-dim);
+    }
+
+    .stage-row.done {
+      border-left-color: var(--accent-green);
+      opacity: 0.6;
+    }
+
+    .stage-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Pending: dim circle */
+    .stage-row.pending .stage-icon::before {
+      content: '';
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--text-muted);
+    }
+
+    /* Active: spinning ring */
+    .stage-row.active .stage-icon::before {
+      content: '';
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 2px solid var(--border-bright);
+      border-top-color: var(--accent-green);
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Done: checkmark */
+    .stage-row.done .stage-icon::before {
+      content: '✓';
+      color: var(--accent-green);
+      font-size: 0.85rem;
+      font-weight: 700;
+    }
+
+    .stage-info { flex: 1; }
+
+    .stage-name {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .stage-row.pending .stage-name { color: var(--text-muted); }
+    .stage-row.active .stage-name { color: var(--accent-green); }
+
+    .stage-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.1rem;
+    }
+
+    /* Terminal log */
+    .terminal {
+      background: #050709;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .terminal-bar {
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      padding: 0.5rem 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .term-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .term-dot:nth-child(1) { background: #ff5f57; }
+    .term-dot:nth-child(2) { background: #febc2e; }
+    .term-dot:nth-child(3) { background: #28c840; }
+
+    .terminal-title {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-left: 0.5rem;
+    }
+
+    #scan-log {
+      height: 160px;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: #4ade80;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* Progress bar */
+    .progress-bar {
+      height: 3px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 40%;
+      background: var(--accent-green);
+      border-radius: 3px;
+      animation: slide 2s ease-in-out infinite;
+    }
+
+    @keyframes slide {
+      0% { transform: translateX(-200%); }
+      100% { transform: translateX(350%); }
+    }
+
+    .elapsed {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ══════════════════════════════════════════════
+       PHASE 3 — RESULTS
+    ══════════════════════════════════════════════ */
+
+    .results-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+
+    .results-meta {}
+
+    .results-scan-id {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      letter-spacing: 0.1em;
+      margin-bottom: 0.3rem;
+    }
+
+    .results-repo {
+      font-size: 1.1rem;
+      font-weight: 700;
+      word-break: break-all;
+      margin-bottom: 0.3rem;
+    }
+
+    .results-timing {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    .results-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border-bright);
+      border-radius: 5px;
+      color: var(--text-secondary);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      padding: 0.45rem 0.875rem;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: border-color 0.2s, color 0.2s;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-outline:hover { border-color: var(--accent-green); color: var(--accent-green); }
+
+    .btn-outline.dl-json:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+    .btn-new-scan {
+      background: transparent;
+      border: 1px solid var(--border-bright);
+      border-radius: 5px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      padding: 0.45rem 0.875rem;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      transition: border-color 0.2s, color 0.2s;
+    }
+
+    .btn-new-scan:hover { border-color: var(--text-secondary); color: var(--text-secondary); }
+
+    /* Metric cards */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 700px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .metric-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+    }
+
+    .mc-label {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 0.5rem;
+    }
+
+    .mc-value {
+      font-size: 2rem;
+      font-weight: 700;
+      font-family: var(--mono);
+      line-height: 1;
+    }
+
+    .mc-sub {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 0.35rem;
+    }
+
+    /* Severity bar */
+    .sev-bar-wrap {
+      margin-bottom: 2rem;
+    }
+
+    .sev-bar-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
+    }
+
+    .sev-bar {
+      display: flex;
+      height: 8px;
+      border-radius: 4px;
+      overflow: hidden;
+      background: var(--surface);
+      margin-bottom: 0.5rem;
+    }
+
+    .sev-seg { height: 100%; transition: width 0.4s; }
+    .sev-seg.critical { background: var(--critical); }
+    .sev-seg.high { background: var(--high); }
+    .sev-seg.medium { background: var(--medium); }
+    .sev-seg.low { background: var(--low); }
+
+    .sev-legend {
+      display: flex;
+      gap: 1.25rem;
+    }
+
+    .sev-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .sev-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    /* Section headers */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-title {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .count-badge {
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      padding: 0.1rem 0.45rem;
+    }
+
+    /* Vuln list */
+    #vuln-list { margin-bottom: 3rem; }
+
+    .vuln-empty {
+      text-align: center;
+      padding: 3rem;
+      color: var(--low);
+      font-family: var(--mono);
+      font-size: 0.85rem;
+    }
+
+    .vuln-item {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 0.75rem;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .vuln-item:hover { border-color: var(--border-bright); }
+
+    .vuln-summary {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+
+    .vuln-summary::-webkit-details-marker { display: none; }
+
+    .sev-badge {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    .sev-badge.critical { background: var(--critical-dim); color: var(--critical); border: 1px solid var(--critical); }
+    .sev-badge.high { background: var(--high-dim); color: var(--high); border: 1px solid var(--high); }
+    .sev-badge.medium { background: var(--medium-dim); color: var(--medium); border: 1px solid var(--medium); }
+    .sev-badge.low { background: var(--low-dim); color: var(--low); border: 1px solid var(--low); }
+
+    .vuln-type {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .vuln-location {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--accent-blue);
+    }
+
+    .conf-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+    }
+
+    .conf-bar {
+      width: 60px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .conf-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--low), var(--accent-green));
+      border-radius: 2px;
+    }
+
+    .conf-pct {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      width: 30px;
+      text-align: right;
+    }
+
+    .vuln-chevron {
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      transition: transform 0.2s;
+    }
+
+    details[open] .vuln-chevron { transform: rotate(90deg); }
+
+    .vuln-body {
+      padding: 0 1rem 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .vuln-desc {
+      font-size: 0.83rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      padding: 0.875rem 0 0.75rem;
+    }
+
+    .vuln-body pre {
+      border-radius: 6px;
+      font-size: 0.78rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .view-patch-link {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--accent-blue);
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+
+    .view-patch-link:hover { text-decoration: underline; }
+
+    /* Patches */
+    #patch-section { margin-bottom: 3rem; }
+
+    .patch-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .patch-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .patch-id {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent-green);
+    }
+
+    .patch-arrow {
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+    }
+
+    .patch-vuln-id {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+    }
+
+    .patch-filepath {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    .patch-conf {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--accent-green);
+      background: var(--accent-green-dim);
+      border: 1px solid rgba(0,255,136,0.25);
+      border-radius: 4px;
+      padding: 0.1rem 0.45rem;
+    }
+
+    .diff-view {
+      padding: 0.75rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.76rem;
+      line-height: 1.7;
+      overflow-x: auto;
+      margin: 0;
+      background: #050709;
+      white-space: pre;
+    }
+
+    .diff-view .diff-add { display: block; background: rgba(0,255,136,0.07); color: #4ade80; }
+    .diff-view .diff-del { display: block; background: rgba(239,68,68,0.07); color: #f87171; }
+    .diff-view .diff-hunk { display: block; color: var(--accent-blue); }
+    .diff-view .diff-ctx { display: block; color: var(--text-muted); }
+
+    /* ══════════════════════════════════════════════
+       HISTORY
+    ══════════════════════════════════════════════ */
+    #history-section {
+      margin-top: 3rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .history-title {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .history-table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+
+    th {
+      background: var(--bg2);
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0.65rem 0.875rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 0.7rem 0.875rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
     tr:last-child td { border-bottom: none; }
-    tr:hover td { background: #111827; }
-    .scan-id { font-family: monospace; font-size: 0.8rem; color: #60a5fa; }
-    .vuln-count { font-weight: 700; }
-    .vuln-high { color: #f87171; }
-    .vuln-zero { color: #4ade80; }
-    .cost { color: #94a3b8; font-size: 0.8rem; }
-    .empty-state { text-align: center; padding: 3rem; color: #4b5563; }
-    .empty-state p { margin-bottom: 0.5rem; }
+    tr:hover td { background: var(--bg2); }
+
+    .td-scanid {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent-blue);
+      white-space: nowrap;
+    }
+
+    .td-repo {
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+    }
+
+    .td-vulns { font-family: var(--mono); font-weight: 700; }
+    .td-vulns.has-vulns { color: var(--critical); }
+    .td-vulns.no-vulns { color: var(--low); }
+
+    .td-cost {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .td-time {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .btn-view {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--accent-blue);
+      background: transparent;
+      border: 1px solid var(--border-bright);
+      border-radius: 4px;
+      padding: 0.25rem 0.6rem;
+      cursor: pointer;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .btn-view:hover { border-color: var(--accent-blue); }
+
+    .empty-history {
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 0.8rem;
+    }
+
+    /* Scan note */
+    .scan-note {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 0.75rem;
+      font-family: var(--mono);
+    }
   </style>
 </head>
 <body>
+
+  <!-- ── Header ── -->
   <header>
-    <h1>SWIFT Scanner</h1>
-    <span class="badge">Dashboard</span>
+    <div class="header-left">
+      <div class="logo">
+        <div class="logo-dot"></div>
+        SWIFT
+      </div>
+      <div class="logo-sub">Security Scanner</div>
+    </div>
+    <div class="header-metrics">
+      <div class="hm-item">
+        <span class="hm-label">Scans</span>
+        <span class="hm-value">{{ metrics.total_scans }}</span>
+      </div>
+      <div class="hm-item">
+        <span class="hm-label">Vulns</span>
+        <span class="hm-value">{{ metrics.total_vulns }}</span>
+      </div>
+      <div class="hm-item">
+        <span class="hm-label">Cost</span>
+        <span class="hm-value">${{ "%.2f"|format(metrics.total_cost_usd) }}</span>
+      </div>
+    </div>
   </header>
+
   <main>
-    <!-- Metrics -->
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="label">Total Scans</div>
-        <div class="value">{{ metrics.total_scans }}</div>
-      </div>
-      <div class="metric-card">
-        <div class="label">Vulns Found</div>
-        <div class="value">{{ metrics.total_vulns }}</div>
-      </div>
-      <div class="metric-card">
-        <div class="label">Total Cost</div>
-        <div class="value">${{ "%.4f"|format(metrics.total_cost_usd) }}</div>
-        <div class="sub">USD</div>
-      </div>
-      <div class="metric-card">
-        <div class="label">Avg Duration</div>
-        <div class="value">{{ "%.1f"|format(metrics.avg_duration_seconds) }}s</div>
-      </div>
-    </div>
 
-    <!-- Trigger Scan Form -->
-    <div class="scan-form">
-      <h2>New Scan</h2>
-      <form method="POST" action="/scan">
-        <div class="form-row">
-          <div class="form-group">
-            <label for="repo">Repository path or GitHub URL</label>
-            <input id="repo" name="repo" type="text" placeholder="https://github.com/owner/repo or /path/to/code" required />
-          </div>
-          <div class="form-check">
-            <input id="patches" name="patches" type="checkbox" value="true" />
-            <label for="patches">Generate patches</label>
-          </div>
-          <button class="btn" type="submit">Scan</button>
+    <!-- ══════════════════════════════════════════════
+         PHASE 1 — INPUT
+    ══════════════════════════════════════════════ -->
+    <div id="phase-input" class="phase active">
+      <div class="input-eyebrow">// initialize scan</div>
+      <h1 class="input-title">Find <span>vulnerabilities</span><br>before attackers do.</h1>
+      <p class="input-desc">
+        Paste a GitHub repo URL. SWIFT runs a 3-stage AI pipeline — regex triage, Haiku fast-scan,
+        Sonnet deep analysis — reporting only findings with ≥95% confidence.
+      </p>
+
+      <div class="input-group">
+        <label class="input-label" for="repo-url">GitHub Repository URL</label>
+        <input
+          id="repo-url"
+          type="text"
+          placeholder="https://github.com/owner/repo"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <div id="repo-suggestions"></div>
+      </div>
+
+      <div class="toggle-row">
+        <label class="toggle-switch">
+          <input type="checkbox" id="patches-toggle" />
+          <span class="toggle-slider"></span>
+        </label>
+        <div>
+          <div class="toggle-label"><strong>Generate Patches</strong></div>
+          <div class="toggle-hint">AI-generated code fixes for each finding (+30–60s)</div>
         </div>
-      </form>
+      </div>
+
+      <button id="btn-scan">INITIALIZE SCAN <span class="btn-cursor"></span></button>
+      <div class="scan-note">Scans typically complete in 1–3 minutes depending on repo size.</div>
+      <div id="scan-error" class="scan-error"></div>
     </div>
 
-    <!-- Scan History -->
-    <section>
-      <h2>Recent Scans</h2>
-      {% if scans %}
-      <table>
-        <thead>
-          <tr>
-            <th>Scan ID</th>
-            <th>Repository</th>
-            <th>Vulns</th>
-            <th>Cost</th>
-            <th>Timestamp</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for scan in scans %}
-          <tr>
-            <td class="scan-id">{{ scan.scan_id }}</td>
-            <td>{{ scan.repo_path }}</td>
-            <td class="vuln-count {% if scan.vuln_count > 0 %}vuln-high{% else %}vuln-zero{% endif %}">
-              {{ scan.vuln_count }}
-            </td>
-            <td class="cost">${{ "%.4f"|format(scan.cost_usd) }}</td>
-            <td>{{ scan.timestamp }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <div class="empty-state">
-        <p>No scans yet.</p>
-        <p>Trigger a scan above or via CLI: <code>swift scan --repo &lt;path&gt;</code></p>
+    <!-- ══════════════════════════════════════════════
+         PHASE 2 — LOADING
+    ══════════════════════════════════════════════ -->
+    <div id="phase-loading" class="phase">
+      <div class="loading-repo">Scanning: <span id="loading-repo-url"></span></div>
+      <div class="loading-title">Scan in progress…</div>
+
+      <div class="stages" id="stages-container">
+        <div class="stage-row active" data-stage="0">
+          <div class="stage-icon"></div>
+          <div class="stage-info">
+            <div class="stage-name">Triage</div>
+            <div class="stage-desc">File enumeration &amp; regex pattern detection</div>
+          </div>
+        </div>
+        <div class="stage-row pending" data-stage="1">
+          <div class="stage-icon"></div>
+          <div class="stage-info">
+            <div class="stage-name">Haiku Analysis</div>
+            <div class="stage-desc">Rapid suspicious pattern flagging (~$0.05/file)</div>
+          </div>
+        </div>
+        <div class="stage-row pending" data-stage="2">
+          <div class="stage-icon"></div>
+          <div class="stage-info">
+            <div class="stage-name">Sonnet Deep Scan</div>
+            <div class="stage-desc">95% confidence gate — high-precision reasoning</div>
+          </div>
+        </div>
+        <div class="stage-row pending" id="stage-patch" data-stage="3" style="display:none">
+          <div class="stage-icon"></div>
+          <div class="stage-info">
+            <div class="stage-name">Patch Generation</div>
+            <div class="stage-desc">AI-generated remediation code, sandbox-tested</div>
+          </div>
+        </div>
       </div>
-      {% endif %}
+
+      <div class="terminal">
+        <div class="terminal-bar">
+          <div class="term-dot"></div>
+          <div class="term-dot"></div>
+          <div class="term-dot"></div>
+          <span class="terminal-title">swift-scanner — live output</span>
+        </div>
+        <pre id="scan-log"></pre>
+      </div>
+
+      <div class="progress-bar"><div class="progress-fill"></div></div>
+      <div class="elapsed" id="elapsed-display">[SCAN RUNNING — 00:00]</div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         PHASE 3 — RESULTS
+    ══════════════════════════════════════════════ -->
+    <div id="phase-results" class="phase">
+
+      <div class="results-header">
+        <div class="results-meta">
+          <div class="results-scan-id" id="results-scan-id"></div>
+          <div class="results-repo" id="results-repo"></div>
+          <div class="results-timing" id="results-timing"></div>
+        </div>
+        <div class="results-actions">
+          <button class="btn-new-scan" id="btn-new-scan">← New Scan</button>
+          <button class="btn-outline dl-json" id="btn-dl-json">⬇ JSON</button>
+          <button class="btn-outline" id="btn-dl-md">⬇ Markdown</button>
+        </div>
+      </div>
+
+      <!-- Metric cards -->
+      <div class="metric-grid">
+        <div class="metric-card">
+          <div class="mc-label">Files Scanned</div>
+          <div class="mc-value" id="mc-files">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="mc-label">Vulnerabilities</div>
+          <div class="mc-value" id="mc-vulns">—</div>
+        </div>
+        <div class="metric-card" id="mc-patches-card">
+          <div class="mc-label">Patches</div>
+          <div class="mc-value" id="mc-patches" style="color:var(--accent-blue)">—</div>
+        </div>
+        <div class="metric-card">
+          <div class="mc-label">Cost</div>
+          <div class="mc-value" id="mc-cost" style="font-size:1.4rem;color:var(--text-muted)">—</div>
+        </div>
+      </div>
+
+      <!-- Severity bar -->
+      <div class="sev-bar-wrap" id="sev-bar-wrap">
+        <div class="sev-bar-label">Severity Breakdown</div>
+        <div class="sev-bar">
+          <div class="sev-seg critical" id="sev-critical" style="width:0%"></div>
+          <div class="sev-seg high"     id="sev-high"     style="width:0%"></div>
+          <div class="sev-seg medium"   id="sev-medium"   style="width:0%"></div>
+          <div class="sev-seg low"      id="sev-low"      style="width:0%"></div>
+        </div>
+        <div class="sev-legend" id="sev-legend"></div>
+      </div>
+
+      <!-- Vulnerability list -->
+      <div id="vuln-section">
+        <div class="section-header">
+          <span class="section-title">Vulnerabilities</span>
+          <span class="count-badge" id="vuln-count-badge">0</span>
+        </div>
+        <div id="vuln-list"></div>
+      </div>
+
+      <!-- Patches -->
+      <div id="patch-section" style="display:none">
+        <div class="section-header">
+          <span class="section-title">Patches</span>
+          <span class="count-badge" id="patch-count-badge">0</span>
+        </div>
+        <div id="patch-list"></div>
+      </div>
+
+    </div>
+
+    <!-- ══════════════════════════════════════════════
+         HISTORY (always visible)
+    ══════════════════════════════════════════════ -->
+    <section id="history-section">
+      <div class="history-header">
+        <span class="history-title">Scan History</span>
+        <span class="count-badge" id="history-count">{{ scans|length }}</span>
+      </div>
+      <div class="history-table-wrap">
+        {% if scans %}
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th>Scan ID</th>
+              <th>Repository</th>
+              <th>Vulns</th>
+              <th>Patches</th>
+              <th>Cost</th>
+              <th>Timestamp</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            {% for scan in scans %}
+            <tr>
+              <td class="td-scanid" title="{{ scan.scan_id }}">{{ scan.scan_id[:16] }}</td>
+              <td class="td-repo" title="{{ scan.repo_path }}">{{ scan.repo_path }}</td>
+              <td class="td-vulns {% if scan.vuln_count > 0 %}has-vulns{% else %}no-vulns{% endif %}">{{ scan.vuln_count }}</td>
+              <td class="td-cost">—</td>
+              <td class="td-cost">${{ "%.4f"|format(scan.cost_usd) }}</td>
+              <td class="td-time">{{ scan.timestamp[:19] }}</td>
+              <td><button class="btn-view" data-scan-id="{{ scan.scan_id }}">View</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty-history" id="history-empty">No scans yet. Initialize one above.</div>
+        {% endif %}
+      </div>
     </section>
+
   </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script>
+  // ══════════════════════════════════════════════
+  // STATE
+  // ══════════════════════════════════════════════
+  const state = {
+    phase: 'input',
+    currentScanId: null,
+    scanStartTime: null,
+    stageTimeouts: [],
+    logTimer: null,
+    elapsedTimer: null,
+    pollTimer: null,
+    repoSuggestions: [],
+  };
+
+  // ══════════════════════════════════════════════
+  // PHASE TRANSITIONS
+  // ══════════════════════════════════════════════
+  function showPhase(name) {
+    document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+    document.getElementById('phase-' + name).classList.add('active');
+    state.phase = name;
+  }
+
+  function resetToInput() {
+    stopPolling();
+    stopLoadingTimers();
+    document.getElementById('repo-url').value = '';
+    document.getElementById('patches-toggle').checked = false;
+    document.getElementById('scan-error').classList.remove('visible');
+    document.getElementById('scan-error').textContent = '';
+    state.currentScanId = null;
+    resetButton();
+    showPhase('input');
+  }
+
+  // ══════════════════════════════════════════════
+  // LOADING PHASE CONTROLLER
+  // ══════════════════════════════════════════════
+  const LOG_MESSAGES = [
+    '[TRIAGE] Enumerating source files...',
+    '[TRIAGE] Scanning Python files for patterns...',
+    '[TRIAGE] Scanning JavaScript/TypeScript files...',
+    '[TRIAGE] Flagged suspicious lines, handing to Haiku...',
+    '[HAIKU] Running rapid triage on flagged regions...',
+    '[HAIKU] Filtering false positives...',
+    '[HAIKU] Pattern confidence: 80%+ threshold passed...',
+    '[SONNET] Deep analysis initiated on high-risk locations...',
+    '[SONNET] Applying 95% confidence gate...',
+    '[SONNET] Cross-referencing CWE patterns...',
+    '[SONNET] Validating exploit conditions...',
+    '[SONNET] Finalizing vulnerability report...',
+    '[PATCH] Generating candidate fixes (3 per vuln)...',
+    '[PATCH] Scoring patch candidates...',
+    '[PATCH] Running sandbox validation...',
+    '[PATCH] Selecting best-scoring patch...',
+    '[OUTPUT] Serializing results...',
+  ];
+
+  let _logIdx = 0;
+
+  function activateStage(stageIdx) {
+    document.querySelectorAll('.stage-row[data-stage]').forEach(row => {
+      const s = parseInt(row.dataset.stage);
+      if (s < stageIdx) row.className = 'stage-row done';
+      else if (s === stageIdx) row.className = 'stage-row active';
+    });
+  }
+
+  function scheduleStages(withPatches) {
+    // Cosmetic stage advancement — each stage gets its own delay
+    const schedule = [[1, 15000], [2, 40000]];
+    if (withPatches) schedule.push([3, 75000]);
+    schedule.forEach(([idx, delay]) => {
+      state.stageTimeouts.push(setTimeout(() => activateStage(idx), delay));
+    });
+  }
+
+  function startLoadingPhase(repoUrl, withPatches) {
+    document.getElementById('loading-repo-url').textContent = repoUrl;
+    document.getElementById('stage-patch').style.display = withPatches ? 'flex' : 'none';
+
+    // Reset stages
+    document.querySelectorAll('.stage-row').forEach((row, i) => {
+      row.className = 'stage-row ' + (i === 0 ? 'active' : 'pending');
+    });
+
+    document.getElementById('scan-log').textContent = '';
+    _logIdx = 0;
+    state.scanStartTime = Date.now();
+    state.stageTimeouts = [];
+
+    showPhase('loading');
+    scheduleStages(withPatches);
+
+    // Log appender
+    state.logTimer = setInterval(() => {
+      if (_logIdx >= LOG_MESSAGES.length) return;
+      const log = document.getElementById('scan-log');
+      const ts = new Date().toISOString().substr(11, 8);
+      log.textContent += `${ts}  ${LOG_MESSAGES[_logIdx]}\n`;
+      log.scrollTop = log.scrollHeight;
+      _logIdx++;
+    }, 4500);
+
+    // Elapsed counter
+    state.elapsedTimer = setInterval(() => {
+      const secs = Math.floor((Date.now() - state.scanStartTime) / 1000);
+      const m = String(Math.floor(secs / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      document.getElementById('elapsed-display').textContent = `[SCAN RUNNING — ${m}:${s}]`;
+    }, 1000);
+  }
+
+  function stopLoadingTimers() {
+    state.stageTimeouts.forEach(t => clearTimeout(t));
+    state.stageTimeouts = [];
+    clearInterval(state.logTimer);
+    clearInterval(state.elapsedTimer);
+    state.logTimer = null;
+    state.elapsedTimer = null;
+  }
+
+  // ══════════════════════════════════════════════
+  // SCAN EXECUTION
+  // ══════════════════════════════════════════════
+  const MAX_POLL_MS = 5 * 60 * 1000; // 5 minutes
+
+  function showError(msg) {
+    const errEl = document.getElementById('scan-error');
+    errEl.textContent = msg;
+    errEl.classList.add('visible');
+  }
+
+  function resetButton() {
+    const btn = document.getElementById('btn-scan');
+    btn.disabled = false;
+    btn.innerHTML = 'INITIALIZE SCAN <span class="btn-cursor"></span>';
+  }
+
+  function stopPolling() {
+    clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+
+  function startPolling(jobId) {
+    const pollStart = Date.now();
+
+    state.pollTimer = setInterval(async () => {
+      // Client-side timeout
+      if (Date.now() - pollStart > MAX_POLL_MS) {
+        stopPolling();
+        stopLoadingTimers();
+        showPhase('input');
+        showError('Scan timed out. Large repos may take longer — try again.');
+        resetButton();
+        return;
+      }
+
+      try {
+        const res = await fetch(`/scan/${jobId}/status`);
+        if (!res.ok) return; // transient error — keep polling
+
+        const status = await res.json();
+
+        if (status.status === 'done') {
+          stopPolling();
+          state.currentScanId = status.scan_id;
+
+          const detailRes = await fetch(`/scan/${status.scan_id}`);
+          if (!detailRes.ok) throw new Error('Failed to fetch scan details');
+          const detail = await detailRes.json();
+          const parsed = JSON.parse(detail.raw_json);
+
+          stopLoadingTimers();
+          renderResults(parsed, status.scan_id);
+          prependHistoryRow(status);
+          resetButton();
+
+        } else if (status.status === 'error') {
+          stopPolling();
+          stopLoadingTimers();
+          showPhase('input');
+          showError('Scan failed: ' + (status.detail || 'Unknown error'));
+          resetButton();
+        }
+        // status === 'running' → keep polling
+      } catch (_) {
+        // Network error — keep polling
+      }
+    }, 2000);
+  }
+
+  async function executeScan(repoUrl, withPatches) {
+    const btn = document.getElementById('btn-scan');
+    btn.disabled = true;
+    btn.textContent = 'SCANNING…';
+
+    document.getElementById('scan-error').classList.remove('visible');
+    startLoadingPhase(repoUrl, withPatches);
+
+    try {
+      const scanRes = await fetch('/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo: repoUrl, patches: withPatches }),
+      });
+
+      if (!scanRes.ok) {
+        const err = await scanRes.json().catch(() => ({ detail: 'Unknown error' }));
+        throw new Error(err.detail || `HTTP ${scanRes.status}`);
+      }
+
+      const data = await scanRes.json();
+      startPolling(data.scan_id);
+
+    } catch (err) {
+      stopLoadingTimers();
+      showPhase('input');
+      showError('Scan failed: ' + err.message);
+      resetButton();
+    }
+  }
+
+  // ══════════════════════════════════════════════
+  // RESULTS RENDERER
+  // ══════════════════════════════════════════════
+  function renderResults(data, scanId) {
+    state.currentScanId = scanId;
+
+    // Header
+    document.getElementById('results-scan-id').textContent = scanId;
+    document.getElementById('results-repo').textContent = data.scan ? data.scan.repo_path : (data.repo_path || scanId);
+    const dur = data.scan ? data.scan.duration_seconds : data.duration_seconds;
+    const ts = data.scan ? data.scan.timestamp : data.timestamp;
+    const cost = data.scan ? data.scan.total_cost_usd : data.total_cost_usd;
+    document.getElementById('results-timing').textContent =
+      `${ts ? ts.substr(0, 19).replace('T', ' ') : '—'}  ·  ${dur ? dur.toFixed(1) + 's' : '—'}`;
+
+    // Metric cards
+    const summary = data.summary || {};
+    const vulns = data.vulnerabilities || [];
+    const patches = data.patches || [];
+
+    document.getElementById('mc-files').textContent = summary.files_scanned ?? data.files_scanned ?? '—';
+
+    const vulnEl = document.getElementById('mc-vulns');
+    vulnEl.textContent = vulns.length;
+    if (vulns.length > 0) {
+      const hasCritHigh = vulns.some(v => v.severity === 'CRITICAL' || v.severity === 'HIGH');
+      vulnEl.style.color = hasCritHigh ? 'var(--critical)' : 'var(--medium)';
+    } else {
+      vulnEl.style.color = 'var(--low)';
+    }
+
+    document.getElementById('mc-patches').textContent = patches.length;
+    if (patches.length === 0) document.getElementById('mc-patches-card').style.opacity = '0.4';
+
+    document.getElementById('mc-cost').textContent = cost != null ? `$${cost.toFixed(4)}` : '—';
+
+    // Severity bar
+    renderSeverityBar(summary.by_severity, vulns);
+
+    // Vuln list
+    document.getElementById('vuln-count-badge').textContent = vulns.length;
+    renderVulnList(vulns, patches);
+
+    // Patch list
+    if (patches.length > 0) {
+      document.getElementById('patch-count-badge').textContent = patches.length;
+      document.getElementById('patch-section').style.display = 'block';
+      renderPatchList(patches);
+    } else {
+      document.getElementById('patch-section').style.display = 'none';
+    }
+
+    showPhase('results');
+
+    // Re-run highlight.js on newly inserted code blocks
+    document.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+  }
+
+  function renderSeverityBar(bySeverity, vulns) {
+    const wrap = document.getElementById('sev-bar-wrap');
+    if (!vulns.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = 'block';
+
+    const counts = bySeverity || {};
+    if (!bySeverity) {
+      vulns.forEach(v => {
+        const k = v.severity.toLowerCase();
+        counts[k] = (counts[k] || 0) + 1;
+      });
+    }
+
+    const total = (counts.critical || 0) + (counts.high || 0) + (counts.medium || 0) + (counts.low || 0);
+    if (!total) { wrap.style.display = 'none'; return; }
+
+    const pct = k => (((counts[k] || 0) / total) * 100).toFixed(1) + '%';
+    document.getElementById('sev-critical').style.width = pct('critical');
+    document.getElementById('sev-high').style.width = pct('high');
+    document.getElementById('sev-medium').style.width = pct('medium');
+    document.getElementById('sev-low').style.width = pct('low');
+
+    const legend = document.getElementById('sev-legend');
+    legend.innerHTML = '';
+    [
+      ['critical', 'var(--critical)', 'Critical'],
+      ['high',     'var(--high)',     'High'],
+      ['medium',   'var(--medium)',   'Medium'],
+      ['low',      'var(--low)',      'Low'],
+    ].forEach(([k, color, label]) => {
+      if (!(counts[k] > 0)) return;
+      legend.insertAdjacentHTML('beforeend', `
+        <div class="sev-legend-item">
+          <div class="sev-dot" style="background:${color}"></div>
+          <span>${label}: ${counts[k]}</span>
+        </div>`);
+    });
+  }
+
+  function renderVulnList(vulns, patches) {
+    const container = document.getElementById('vuln-list');
+    if (!vulns.length) {
+      container.innerHTML = '<div class="vuln-empty">✓ No vulnerabilities detected (≥95% confidence threshold)</div>';
+      return;
+    }
+
+    const patchMap = {};
+    (patches || []).forEach(p => { patchMap[p.vuln_id] = p.id; });
+
+    container.innerHTML = vulns.map(v => {
+      const sevClass = v.severity.toLowerCase();
+      const confPct = Math.round(v.confidence * 100);
+      const patchId = patchMap[v.id];
+      const escapedSnippet = escapeHtml(v.code_snippet || '');
+      return `
+        <details class="vuln-item">
+          <summary class="vuln-summary">
+            <span class="sev-badge ${sevClass}">${v.severity}</span>
+            <span class="vuln-type">${escapeHtml(v.vuln_type.replace(/_/g, ' '))}</span>
+            <span class="vuln-location">${escapeHtml(v.file_path)}:${v.line_number}</span>
+            <div class="conf-bar-wrap">
+              <div class="conf-bar"><div class="conf-fill" style="width:${confPct}%"></div></div>
+              <span class="conf-pct">${confPct}%</span>
+            </div>
+            <span class="vuln-chevron">▶</span>
+          </summary>
+          <div class="vuln-body">
+            <p class="vuln-desc">${escapeHtml(v.description)}</p>
+            <pre><code class="language-python">${escapedSnippet}</code></pre>
+            ${patchId ? `<button class="view-patch-link" onclick="scrollToPatch('${escapeHtml(patchId)}')">→ View patch ${patchId}</button>` : ''}
+          </div>
+        </details>`;
+    }).join('');
+  }
+
+  function renderPatchList(patches) {
+    const container = document.getElementById('patch-list');
+    container.innerHTML = patches.map(p => `
+      <div class="patch-card" id="patch-${escapeHtml(p.id)}">
+        <div class="patch-header">
+          <span class="patch-id">${escapeHtml(p.id)}</span>
+          <span class="patch-arrow">→</span>
+          <span class="patch-vuln-id">${escapeHtml(p.vuln_id)}</span>
+          <span class="patch-filepath">${escapeHtml(p.file_path)}</span>
+          <span class="patch-conf">${Math.round(p.confidence * 100)}%</span>
+        </div>
+        <pre class="diff-view">${highlightDiff(p.diff)}</pre>
+      </div>`).join('');
+  }
+
+  function highlightDiff(diffStr) {
+    return (diffStr || '').split('\n').map(line => {
+      const safe = escapeHtml(line);
+      if (line.startsWith('+') && !line.startsWith('+++'))
+        return `<span class="diff-add">${safe}</span>`;
+      if (line.startsWith('-') && !line.startsWith('---'))
+        return `<span class="diff-del">${safe}</span>`;
+      if (line.startsWith('@@'))
+        return `<span class="diff-hunk">${safe}</span>`;
+      return `<span class="diff-ctx">${safe}</span>`;
+    }).join('\n');
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function scrollToPatch(patchId) {
+    const el = document.getElementById('patch-' + patchId);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ══════════════════════════════════════════════
+  // DOWNLOAD HANDLERS
+  // ══════════════════════════════════════════════
+  function downloadReport(format) {
+    if (!state.currentScanId) return;
+    const a = document.createElement('a');
+    a.href = `/scan/${state.currentScanId}/report/${format}`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  // ══════════════════════════════════════════════
+  // REPO SUGGESTIONS
+  // ══════════════════════════════════════════════
+  async function loadRepoSuggestions() {
+    const dropdown = document.getElementById('repo-suggestions');
+    try {
+      const res = await fetch('/repos');
+      if (!res.ok) {
+        const redirectUri = encodeURIComponent(window.location.origin + '/auth/callback');
+        dropdown.innerHTML = `<a class="suggestion-link" href="/auth/github?redirect_uri=${redirectUri}">🔗 Connect GitHub for repo suggestions</a>`;
+        return;
+      }
+      const repos = await res.json();
+      state.repoSuggestions = repos;
+      populateSuggestions(repos);
+    } catch (_) {
+      // Silent fail — suggestions are optional
+    }
+  }
+
+  function populateSuggestions(repos) {
+    const dropdown = document.getElementById('repo-suggestions');
+    dropdown.innerHTML = repos.slice(0, 20).map(r =>
+      `<div class="suggestion-item" data-url="${escapeHtml(r.html_url)}">${escapeHtml(r.full_name)}</div>`
+    ).join('');
+  }
+
+  function filterSuggestions(query) {
+    const dropdown = document.getElementById('repo-suggestions');
+    if (!state.repoSuggestions.length) return;
+    const filtered = query
+      ? state.repoSuggestions.filter(r => r.full_name.toLowerCase().includes(query.toLowerCase()))
+      : state.repoSuggestions;
+    populateSuggestions(filtered.slice(0, 10));
+  }
+
+  // ══════════════════════════════════════════════
+  // HISTORY
+  // ══════════════════════════════════════════════
+  async function viewHistoryScan(scanId) {
+    try {
+      const res = await fetch(`/scan/${scanId}`);
+      if (!res.ok) throw new Error('Not found');
+      const detail = await res.json();
+      const parsed = JSON.parse(detail.raw_json);
+      renderResults(parsed, scanId);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) {
+      alert('Failed to load scan: ' + err.message);
+    }
+  }
+
+  function prependHistoryRow(summary) {
+    let tbody = document.getElementById('history-tbody');
+    if (!tbody) {
+      // Replace empty state with table
+      const wrap = document.querySelector('.history-table-wrap');
+      wrap.innerHTML = `
+        <table id="history-table">
+          <thead><tr>
+            <th>Scan ID</th><th>Repository</th><th>Vulns</th>
+            <th>Patches</th><th>Cost</th><th>Timestamp</th><th></th>
+          </tr></thead>
+          <tbody id="history-tbody"></tbody>
+        </table>`;
+      tbody = document.getElementById('history-tbody');
+    }
+    const vulnClass = summary.vuln_count > 0 ? 'has-vulns' : 'no-vulns';
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="td-scanid" title="${escapeHtml(summary.scan_id)}">${escapeHtml(summary.scan_id.substr(0, 16))}</td>
+      <td class="td-repo" title="${escapeHtml(summary.repo_path)}">${escapeHtml(summary.repo_path)}</td>
+      <td class="td-vulns ${vulnClass}">${summary.vuln_count}</td>
+      <td class="td-cost">${summary.patch_count ?? '—'}</td>
+      <td class="td-cost">$${(summary.cost_usd || 0).toFixed(4)}</td>
+      <td class="td-time">${(summary.timestamp || '').substr(0, 19)}</td>
+      <td><button class="btn-view" data-scan-id="${escapeHtml(summary.scan_id)}">View</button></td>`;
+    tbody.prepend(row);
+
+    const countEl = document.getElementById('history-count');
+    countEl.textContent = parseInt(countEl.textContent || '0') + 1;
+  }
+
+  // ══════════════════════════════════════════════
+  // EVENT LISTENERS
+  // ══════════════════════════════════════════════
+  document.addEventListener('DOMContentLoaded', () => {
+
+    // Scan button
+    document.getElementById('btn-scan').addEventListener('click', () => {
+      const url = document.getElementById('repo-url').value.trim();
+      const withPatches = document.getElementById('patches-toggle').checked;
+      const errEl = document.getElementById('scan-error');
+
+      if (!url) {
+        errEl.textContent = 'Please enter a GitHub repository URL.';
+        errEl.classList.add('visible');
+        return;
+      }
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('git@')) {
+        errEl.textContent = 'Enter a valid GitHub URL (https://github.com/owner/repo).';
+        errEl.classList.add('visible');
+        return;
+      }
+      errEl.classList.remove('visible');
+      executeScan(url, withPatches);
+    });
+
+    // Enter key on input
+    document.getElementById('repo-url').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-scan').click();
+    });
+
+    // Suggestions focus/blur/input
+    const urlInput = document.getElementById('repo-url');
+    const dropdown = document.getElementById('repo-suggestions');
+
+    urlInput.addEventListener('focus', () => {
+      if (dropdown.children.length) dropdown.classList.add('open');
+    });
+
+    urlInput.addEventListener('input', () => {
+      filterSuggestions(urlInput.value);
+      if (dropdown.children.length) dropdown.classList.add('open');
+    });
+
+    urlInput.addEventListener('blur', () => {
+      setTimeout(() => dropdown.classList.remove('open'), 200);
+    });
+
+    dropdown.addEventListener('click', e => {
+      const item = e.target.closest('.suggestion-item');
+      if (item) {
+        urlInput.value = item.dataset.url;
+        dropdown.classList.remove('open');
+      }
+    });
+
+    // New scan button
+    document.getElementById('btn-new-scan').addEventListener('click', resetToInput);
+
+    // Download buttons
+    document.getElementById('btn-dl-json').addEventListener('click', () => downloadReport('json'));
+    document.getElementById('btn-dl-md').addEventListener('click', () => downloadReport('markdown'));
+
+    // History view buttons (delegated)
+    document.addEventListener('click', e => {
+      const btn = e.target.closest('.btn-view');
+      if (btn) viewHistoryScan(btn.dataset.scanId);
+    });
+
+    // Init
+    loadRepoSuggestions();
+    hljs.highlightAll();
+  });
+  </script>
 </body>
 </html>
