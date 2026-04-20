@@ -38,14 +38,32 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
+      - name: Store ANTHROPIC_API_KEY in Secrets Manager
+        run: |
+          aws secretsmanager create-secret \
+            --name swift/anthropic-api-key \
+            --secret-string "${{ secrets.ANTHROPIC_API_KEY }}" \
+            --region us-east-2 2>/dev/null || \
+          aws secretsmanager update-secret \
+            --secret-id swift/anthropic-api-key \
+            --secret-string "${{ secrets.ANTHROPIC_API_KEY }}" \
+            --region us-east-2
+
       - name: Deploy to App Runner
-        uses: awslabs/amazon-app-runner-deploy@main
-        with:
-          service: swift-scanner
-          image: ${{ steps.login-ecr.outputs.registry }}/swift-scanner:${{ github.sha }}
-          access-role-arn: arn:aws:iam::104363824413:role/apprunner-ecr-access-role
-          region: us-east-2
-          port: 8000
-          cpu: 1
-          memory: 2
-          wait-for-service-stability-seconds: 300
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          SECRET_ARN=$(aws secretsmanager describe-secret \
+            --secret-id swift/anthropic-api-key \
+            --region us-east-2 \
+            --query ARN --output text)
+
+          aws apprunner start-deployment \
+            --service-arn $(aws apprunner list-services --region us-east-2 --query "ServiceSummaryList[?ServiceName=='swift-scanner'].ServiceArn" --output text) \
+            --region us-east-2 2>/dev/null || \
+          aws apprunner create-service \
+            --service-name swift-scanner \
+            --source-configuration "ImageRepository={ImageIdentifier=${ECR_REGISTRY}/swift-scanner:${IMAGE_TAG},ImageRepositoryType=ECR,ImageConfiguration={Port=8000,RuntimeEnvironmentVariables={SWIFT_LOG_LEVEL=INFO,SWIFT_CONFIDENCE_THRESHOLD=0.95,PYTHONPATH=/app,SWIFT_ENV=apprunner},RuntimeEnvironmentSecrets={ANTHROPIC_API_KEY=${SECRET_ARN}}}}" \
+            --instance-configuration "Cpu=1 vCPU,Memory=2 GB" \
+            --region us-east-2
