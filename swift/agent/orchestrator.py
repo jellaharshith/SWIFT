@@ -9,6 +9,7 @@ from typing import List
 import anthropic
 
 from agent.models import Patch, ScanResult, Vulnerability
+from chains.detector import ExploitChainDetector
 from config.settings import get_config
 from log.logger import MetricsCollector, get_logger
 from patches.generator import PatchGenerator
@@ -49,6 +50,7 @@ def scan_codebase(
         client, model=config.haiku_model, max_retries=config.max_retries
     )
     sonnet = SonnetAnalysisScanner(client, model=config.sonnet_model)
+    chain_detector = ExploitChainDetector(client, model=config.sonnet_model)
 
     logger.info("Scan %s started on %s", scan_id, repo_path)
     start = time.monotonic()
@@ -86,6 +88,12 @@ def scan_codebase(
 
     logger.info("Sonnet stage: %d vulnerabilities confirmed (≥95%% confidence)", len(vulnerabilities))
 
+    # --- Phase 3.5: Exploit chain detection (best-effort) ---
+    exploit_chains = []
+    if vulnerabilities:
+        exploit_chains = chain_detector.detect_chains(vulnerabilities)
+        logger.info("Chain detection: %d exploit chains identified", len(exploit_chains))
+
     duration = time.monotonic() - start
 
     result = ScanResult(
@@ -97,6 +105,7 @@ def scan_codebase(
         duration_seconds=duration,
         total_cost_usd=metrics.total_cost_usd,
         timestamp=datetime.now(timezone.utc).isoformat(),
+        exploit_chains=exploit_chains,
     )
 
     # --- Phase 4: Patch generation (optional) ---
@@ -148,4 +157,5 @@ def generate_patches(scan_result: ScanResult) -> ScanResult:
         duration_seconds=scan_result.duration_seconds,
         total_cost_usd=scan_result.total_cost_usd,
         timestamp=scan_result.timestamp,
+        exploit_chains=scan_result.exploit_chains,
     )

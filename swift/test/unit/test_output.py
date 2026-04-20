@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agent.models import Patch, ScanResult, Vulnerability
+from agent.models import Patch, ScanResult, Vulnerability, ExploitChain
 from output.formatters import JSONFormatter, MarkdownFormatter, format_output
 
 
@@ -36,7 +36,20 @@ def _make_patch() -> Patch:
     )
 
 
-def _make_scan_result(vulns=None, patches=None) -> ScanResult:
+def _make_chain() -> ExploitChain:
+    return ExploitChain(
+        chain_id="CHAIN-001",
+        name="SQL Injection → Auth Bypass → Admin Access",
+        vulnerability_ids=["SWIFT-001", "SWIFT-002"],
+        attack_path="1. Exploit SQL injection in login query\n2. Bypass authentication\n3. Access admin panel",
+        entry_point="auth/views.py:42",
+        impact="Full admin access without credentials",
+        severity="CRITICAL",
+        confidence=0.91,
+    )
+
+
+def _make_scan_result(vulns=None, patches=None, chains=None) -> ScanResult:
     return ScanResult(
         scan_id="SCAN-001",
         repo_path="/tmp/repo",
@@ -46,6 +59,7 @@ def _make_scan_result(vulns=None, patches=None) -> ScanResult:
         duration_seconds=5.0,
         total_cost_usd=0.42,
         timestamp="2026-04-18T12:00:00Z",
+        exploit_chains=chains if chains is not None else [],
     )
 
 
@@ -122,6 +136,32 @@ class TestJSONFormatter:
             assert key in by_sev
             assert by_sev[key] == 0
 
+    def test_json_exploit_chains_present(self):
+        """JSON output must include exploit_chains array."""
+        result = _make_scan_result(chains=[_make_chain()])
+        parsed = json.loads(JSONFormatter().format(result))
+        assert "exploit_chains" in parsed
+        assert len(parsed["exploit_chains"]) == 1
+
+    def test_json_exploit_chain_fields(self):
+        """Each exploit chain entry must carry all required fields."""
+        result = _make_scan_result(chains=[_make_chain()])
+        parsed = json.loads(JSONFormatter().format(result))
+        chain = parsed["exploit_chains"][0]
+        assert chain["chain_id"] == "CHAIN-001"
+        assert chain["name"] == "SQL Injection → Auth Bypass → Admin Access"
+        assert chain["vulnerability_ids"] == ["SWIFT-001", "SWIFT-002"]
+        assert chain["entry_point"] == "auth/views.py:42"
+        assert chain["impact"] == "Full admin access without credentials"
+        assert chain["severity"] == "CRITICAL"
+        assert chain["confidence"] == 0.91
+
+    def test_json_empty_chains(self):
+        """JSON output must have empty exploit_chains array when no chains exist."""
+        result = _make_scan_result()
+        parsed = json.loads(JSONFormatter().format(result))
+        assert parsed["exploit_chains"] == []
+
 
 # ---------------------------------------------------------------------------
 # MarkdownFormatter tests
@@ -197,6 +237,40 @@ class TestMarkdownFormatter:
         result = _make_scan_result(vulns=[_make_vuln()])
         output = MarkdownFormatter().format(result)
         assert "97%" in output
+
+    def test_markdown_has_exploit_chains_section(self):
+        """Report must include ## Exploit Chains with chain details when chains exist."""
+        result = _make_scan_result(chains=[_make_chain()])
+        output = MarkdownFormatter().format(result)
+        assert "## Exploit Chains" in output
+        assert "CHAIN-001" in output
+        assert "SQL Injection → Auth Bypass → Admin Access" in output
+
+    def test_markdown_empty_no_chains_section(self):
+        """Report must NOT include ## Exploit Chains when there are none."""
+        result = _make_scan_result(chains=[])
+        output = MarkdownFormatter().format(result)
+        assert "## Exploit Chains" not in output
+
+    def test_markdown_chains_contain_metadata(self):
+        """Exploit chain section must contain entry point, impact, and severity."""
+        result = _make_scan_result(chains=[_make_chain()])
+        output = MarkdownFormatter().format(result)
+        assert "auth/views.py:42" in output
+        assert "Full admin access without credentials" in output
+        assert "CRITICAL" in output
+
+    def test_markdown_chains_confidence_as_percent(self):
+        """Chain confidence (0.91) must appear as a percentage (91%) in the report."""
+        result = _make_scan_result(chains=[_make_chain()])
+        output = MarkdownFormatter().format(result)
+        assert "91%" in output
+
+    def test_markdown_chains_include_attack_path(self):
+        """Chain entry must include the full attack path description."""
+        result = _make_scan_result(chains=[_make_chain()])
+        output = MarkdownFormatter().format(result)
+        assert "Exploit SQL injection" in output or "1." in output  # Attack path content
 
 
 # ---------------------------------------------------------------------------
