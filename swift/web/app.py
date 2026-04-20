@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SWIFT Scanner", version="0.1.0", lifespan=lifespan)
 
-_NETLIFY_ORIGIN = os.environ.get("NETLIFY_ORIGIN", "https://swift-app.netlify.app")
+_NETLIFY_ORIGIN = os.environ.get("NETLIFY_ORIGIN", "https://swiftscanner.netlify.app")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[_NETLIFY_ORIGIN],
@@ -273,7 +273,7 @@ def github_callback(code: str, redirect_uri: str):
         raise HTTPException(status_code=400, detail=str(exc))
     session_id = str(uuid.uuid4())
     _tokens[session_id] = token
-    netlify_url = os.environ.get("NETLIFY_ORIGIN", "https://swift-app.netlify.app")
+    netlify_url = os.environ.get("NETLIFY_ORIGIN", "https://swiftscanner.netlify.app")
     response = RedirectResponse(url=netlify_url)
     response.set_cookie(
         "session_id", session_id,
