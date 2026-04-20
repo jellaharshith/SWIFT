@@ -1,70 +1,15 @@
-name: Deploy to AWS AppRunner
+# DISABLED: Backend migrated to Railway (auto-deploys via GitHub integration).
+# Railway project: https://railway.app (connect repo in Railway dashboard)
+# This file is kept for historical reference only.
+
+name: Deploy (Disabled - Using Railway)
 
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-env:
-  AWS_REGION: us-east-2
-  ECR_REPOSITORY: swift-scanner
-  APPRUNNER_SERVICE_NAME: swift-scanner
+  workflow_dispatch:  # Manual trigger only
 
 jobs:
-  deploy:
+  placeholder:
     runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::104363824413:role/github-actions-swift-deploy
-          aws-region: us-east-2
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build, tag, and push image to ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -f swift/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-      - name: Deploy to App Runner
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-          API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          # Get existing service ARN if it exists
-          SERVICE_ARN=$(aws apprunner list-services --region us-east-2 --query "ServiceSummaryList[?ServiceName=='swift-scanner'].ServiceArn" --output text 2>/dev/null || echo "")
-
-          # Source config: pass API key + other env vars
-          SOURCE_CONFIG="ImageRepository={ImageIdentifier=${ECR_REGISTRY}/swift-scanner:${IMAGE_TAG},ImageRepositoryType=ECR,ImageConfiguration={Port=8000,RuntimeEnvironmentVariables={ANTHROPIC_API_KEY=${API_KEY},SWIFT_LOG_LEVEL=INFO,SWIFT_CONFIDENCE_THRESHOLD=0.95,PYTHONPATH=/app,SWIFT_ENV=apprunner}}}"
-
-          # Update or create service
-          if [ -n "$SERVICE_ARN" ]; then
-            echo "Updating existing service: $SERVICE_ARN"
-            aws apprunner update-service \
-              --service-arn "$SERVICE_ARN" \
-              --source-configuration "$SOURCE_CONFIG" \
-              --health-check-configuration "Protocol=HTTP,Path=/,Interval=10,Timeout=5,HealthyThreshold=2,UnhealthyThreshold=3" \
-              --region us-east-2
-          else
-            echo "Creating new service"
-            aws apprunner create-service \
-              --service-name swift-scanner \
-              --source-configuration "$SOURCE_CONFIG" \
-              --instance-configuration "Cpu=1 vCPU,Memory=2 GB" \
-              --health-check-configuration "Protocol=HTTP,Path=/,Interval=10,Timeout=5,HealthyThreshold=2,UnhealthyThreshold=3" \
-              --region us-east-2
-          fi
+      - name: Notice
+        run: echo "Deployment is handled by Railway GitHub integration. See railway.json."
