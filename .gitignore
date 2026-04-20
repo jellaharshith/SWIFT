@@ -18,3 +18,7 @@ docs/superpowers/
 **/docs/superpowers/
 *.pdf
 
+
+# Local Netlify folder
+.netlify
+.worktrees/
