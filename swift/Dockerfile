@@ -15,7 +15,7 @@ RUN rm -rf .venv __pycache__ test/.venv
 
 # Set environment
 ENV PYTHONPATH=/app
-ENV SWIFT_ENV=apprunner
+ENV SWIFT_ENV=production
 ENV PYTHONUNBUFFERED=1
 
 # Create data directory for SQLite (AppRunner needs writable dir)
