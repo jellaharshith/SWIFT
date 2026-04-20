@@ -13,13 +13,15 @@ COPY swift/ .
 # Remove venv and test artifacts from image
 RUN rm -rf .venv __pycache__ test/.venv
 
+# Install git (required for git clone in github_cloner.py) and create data dir
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /data && chmod 777 /data
+
 # Set environment
 ENV PYTHONPATH=/app
 ENV SWIFT_ENV=production
 ENV PYTHONUNBUFFERED=1
-
-# Create data directory for SQLite (AppRunner needs writable dir)
-RUN mkdir -p /data && chmod 777 /data
 
 EXPOSE 8000
 
