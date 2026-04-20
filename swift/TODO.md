@@ -50,17 +50,32 @@
 | Write AWS App Runner config | `apprunner.yaml` | ✅ DONE |
 | Write deployment helper script | `aws-deploy.sh` | ✅ DONE |
 | Write env vars template | `.env.example` | ✅ DONE |
-| Add `ANTHROPIC_API_KEY` to AWS Secrets Manager | Platform secrets | ⬜ PENDING |
-| Run `aws-deploy.sh`, create App Runner service | AWS Console/CLI | ⬜ PENDING |
+| Add `ANTHROPIC_API_KEY` to AWS Secrets Manager | ✅ LIVE: `arn:aws:secretsmanager:us-east-1:104363824413:secret:swift/anthropic-api-key-kB5L6R` | ✅ DONE |
+| Push Docker image to ECR | `104363824413.dkr.ecr.us-east-1.amazonaws.com/swift-scanner:latest` | ✅ DONE |
+| Create `AppRunnerECRAccessRole` IAM role | AWS IAM | ✅ DONE |
+| **Create App Runner service (manual — console only)** | AWS Console → App Runner (us-east-1) | ⬜ PENDING |
 | Smoke test deployed endpoint | — | ⬜ PENDING |
 
-**Deploy steps:**
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export AWS_REGION=us-east-1
-bash aws-deploy.sh
-# Then follow printed aws apprunner create-service command
-```
+### ⬜ App Runner Manual Activation (one-time)
+
+App Runner requires first-time activation via AWS Console. All infra is ready:
+
+1. Go to **AWS Console → App Runner (us-east-1)**
+2. Click **"Create service"**
+3. Source: **Container registry → Amazon ECR**
+4. Image URI: `104363824413.dkr.ecr.us-east-1.amazonaws.com/swift-scanner:latest`
+5. ECR access role: `AppRunnerECRAccessRole` (already created)
+6. Port: `8000`
+7. Environment variables:
+   - `SWIFT_LOG_LEVEL` = `INFO`
+   - `SWIFT_CONFIDENCE_THRESHOLD` = `0.95`
+   - `PYTHONPATH` = `/app`
+8. Secrets (from Secrets Manager):
+   - `ANTHROPIC_API_KEY` = `arn:aws:secretsmanager:us-east-1:104363824413:secret:swift/anthropic-api-key-kB5L6R`
+9. Instance: **1 vCPU, 2 GB**
+10. Service name: `swift-scanner` → **Create**
+
+After creation: share service URL → smoke test `GET /` and `GET /dashboard`.
 
 ---
 
@@ -74,7 +89,7 @@ bash aws-deploy.sh
 | 18 | SQLite scan storage | `web/storage.py` | ✅ DONE |
 | 19 | Dashboard HTML | `web/templates/dashboard.html` | ✅ DONE |
 | 20 | ~~Heroku Procfile~~ → AWS App Runner | `apprunner.yaml` | ✅ DONE |
-| 21 | README.md | `README.md` | ✅ DONE |
+| 21 | README.md (updated with Phase 2 features, deploy, API) | `README.md` | ✅ DONE |
 | 22 | CONTRIBUTING.md | `CONTRIBUTING.md` | ✅ DONE |
 | 23 | PRODUCTION_CHECKLIST.md | `PRODUCTION_CHECKLIST.md` | ✅ DONE |
 | 24 | Update requirements + env example | `requirement.txt`, `.env.example` | ✅ DONE |
@@ -88,6 +103,35 @@ bash aws-deploy.sh
 3. Create App Runner service from printed command
 4. Verify `GET /` returns `{"status": "ok"}`
 5. Run `GET /dashboard` → confirm HTML renders
+
+---
+
+## ✅ DONE: Modern Frontend SPA
+
+Full rewrite of `web/templates/dashboard.html` + async scan queue + download endpoints.
+
+### Backend (`web/app.py`)
+
+| Sub-task | Status |
+|----------|--------|
+| All imports, `_reconstruct_scan_result` helper | ✅ DONE |
+| `GET /scan/{scan_id}/report/json` download endpoint | ✅ DONE |
+| `GET /scan/{scan_id}/report/markdown` download endpoint | ✅ DONE |
+| Async `POST /scan` via `BackgroundTasks` (returns instantly) | ✅ DONE |
+| `GET /scan/{scan_id}/status` polling endpoint | ✅ DONE |
+
+### Frontend (`web/templates/dashboard.html`)
+
+| Sub-task | Status |
+|----------|--------|
+| Phase 1: GitHub URL input + patches toggle + scan button + repo suggestions | ✅ DONE |
+| Phase 2: Animated loading (stage rows: Triage→Haiku→Sonnet→Patching, terminal log, elapsed timer) | ✅ DONE |
+| Phase 3: Metric cards + severity bar + vuln list (confidence bar, code snippet, hljs) + diff viewer | ✅ DONE |
+| Download JSON / Download Markdown buttons | ✅ DONE |
+| Scan history table with "View" buttons (JS-driven, no reload) | ✅ DONE |
+| Async polling (2s interval, 5min timeout, no browser hang) | ✅ DONE |
+| Stage timer fix (chained setTimeout, not fixed setInterval) | ✅ DONE |
+| Scan button disabled during scan, re-enabled on complete/error | ✅ DONE |
 
 ---
 
