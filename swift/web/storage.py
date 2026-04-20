@@ -149,16 +149,21 @@ def get_metrics(session: Session) -> dict:
     }
 
 
-def create_engine_and_session():
+def create_engine_and_session() -> tuple:
     """Create a SQLAlchemy engine and session factory.
 
     Uses DATABASE_URL env var if set (Railway PostgreSQL), otherwise
     falls back to SQLite at SWIFT_DB_PATH for local development.
 
     Returns:
-        Tuple of (engine, SessionLocal) where SessionLocal is a sessionmaker.
+        A two-tuple of (Engine, sessionmaker): the bound SQLAlchemy engine
+        and a configured session factory. Call SessionLocal() to obtain a session.
+
+    Raises:
+        sqlalchemy.exc.ArgumentError: If DATABASE_URL is set but is not a
+            valid SQLAlchemy connection string.
     """
-    if _DATABASE_URL:
+    if _DATABASE_URL and _DATABASE_URL.strip():
         engine = create_engine(_DATABASE_URL)
     else:
         engine = create_engine(
