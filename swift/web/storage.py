@@ -1,4 +1,4 @@
-"""SQLAlchemy SQLite storage for SWIFT scan history."""
+"""SQLAlchemy storage for SWIFT scan history (PostgreSQL or SQLite)."""
 from __future__ import annotations
 
 import json
@@ -14,8 +14,10 @@ from log.logger import get_logger
 
 logger = get_logger("web.storage")
 
-# Use /data for AppRunner (writable, persistent), fallback to ./swift_scans.db for local dev
-_DB_PATH = os.environ.get("SWIFT_DB_PATH", "/data/swift_scans.db" if os.environ.get("SWIFT_ENV") == "apprunner" else "./swift_scans.db")
+# DATABASE_URL takes precedence (Railway/Heroku PostgreSQL).
+# Fallback: SQLite for local dev.
+_DATABASE_URL = os.environ.get("DATABASE_URL")
+_DB_PATH = os.environ.get("SWIFT_DB_PATH", "./swift_scans.db")
 
 
 class Base(DeclarativeBase):
@@ -148,12 +150,20 @@ def get_metrics(session: Session) -> dict:
 
 
 def create_engine_and_session():
-    """Create a SQLAlchemy engine and session factory using the configured DB path.
+    """Create a SQLAlchemy engine and session factory.
+
+    Uses DATABASE_URL env var if set (Railway PostgreSQL), otherwise
+    falls back to SQLite at SWIFT_DB_PATH for local development.
 
     Returns:
         Tuple of (engine, SessionLocal) where SessionLocal is a sessionmaker.
     """
-    db_url = f"sqlite:///{_DB_PATH}"
-    engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    if _DATABASE_URL:
+        engine = create_engine(_DATABASE_URL)
+    else:
+        engine = create_engine(
+            f"sqlite:///{_DB_PATH}",
+            connect_args={"check_same_thread": False},
+        )
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     return engine, SessionLocal
