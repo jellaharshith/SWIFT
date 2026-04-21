@@ -24,6 +24,15 @@ class _JSONFormatter(logging.Formatter):
         return json.dumps(payload)
 
 
+class _LowercaseLevelFormatter(logging.Formatter):
+    """Format logs with lowercase level names: [info], [warning], [error]"""
+
+    def format(self, record: logging.LogRecord) -> str:
+        # Lowercase the level name before formatting
+        record.levelname = record.levelname.lower()
+        return super().format(record)
+
+
 def get_logger(name: str = "swift") -> logging.Logger:
     """Return (or create) the named logger with stream + file handlers.
 
@@ -42,11 +51,11 @@ def get_logger(name: str = "swift") -> logging.Logger:
 
     logger.setLevel(logging.DEBUG)
 
-    # Human-readable stderr handler
+    # Human-readable stderr handler with lowercase levels
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(logging.INFO)
     stream_handler.setFormatter(
-        logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+        _LowercaseLevelFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     )
 
     # JSON file handler
