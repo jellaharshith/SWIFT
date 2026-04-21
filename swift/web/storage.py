@@ -7,7 +7,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import Column, Float, Integer, String, Text, create_engine, func
+from sqlalchemy import Column, Float, Integer, String, Text, create_engine, func, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from agent.models import ScanResult
@@ -75,13 +75,61 @@ def _scan_result_to_dict(result: ScanResult) -> dict:
     return asdict(result)
 
 
+# Columns that must exist in scan_jobs, together with their SQL definition used
+# when auto-migrating a stale database at startup.
+_REQUIRED_SCAN_JOB_COLUMNS: dict[str, str] = {
+    "progress": "INTEGER DEFAULT 0",
+    "signals_detected": "INTEGER DEFAULT 0",
+    "batch_current": "INTEGER DEFAULT 0",
+    "batch_total": "INTEGER DEFAULT 0",
+    "files_total": "INTEGER DEFAULT 0",
+    "files_scanned": "INTEGER DEFAULT 0",
+    "current_file": "TEXT",
+    "detail": "TEXT",
+}
+
+
+def _ensure_scan_jobs_columns(engine) -> None:
+    """Auto-migrate any columns that are absent from the live scan_jobs table.
+
+    This is a belt-and-suspenders safety net that runs after create_all() so
+    the application never crashes due to schema drift, even when Alembic
+    migrations have not been applied manually.
+
+    Each missing column is added with ALTER TABLE using a default value so
+    existing rows are unaffected.  The check is read-only when all columns are
+    already present, making it safe to call on every startup.
+
+    Args:
+        engine: SQLAlchemy engine connected to the target database.
+    """
+    inspector = inspect(engine)
+    existing = {c["name"] for c in inspector.get_columns("scan_jobs")}
+    missing = set(_REQUIRED_SCAN_JOB_COLUMNS) - existing
+    if not missing:
+        return
+
+    logger.warning(
+        "scan_jobs is missing %d column(s) — auto-migrating: %s",
+        len(missing),
+        sorted(missing),
+    )
+    with engine.begin() as conn:
+        for col_name in sorted(missing):
+            col_def = _REQUIRED_SCAN_JOB_COLUMNS[col_name]
+            conn.execute(text(f"ALTER TABLE scan_jobs ADD COLUMN {col_name} {col_def}"))
+            logger.info("Added column scan_jobs.%s (%s)", col_name, col_def)
+    logger.info("Auto-migration of scan_jobs complete.")
+
+
 def init_db(engine) -> None:
-    """Create all tables if they do not exist.
+    """Create all tables if they do not exist, then ensure schema is current.
 
     Args:
         engine: SQLAlchemy engine instance connected to the target database.
     """
     Base.metadata.create_all(engine)
+    _ensure_scan_jobs_columns(engine)
     logger.info("Database tables initialized.")
 
 
