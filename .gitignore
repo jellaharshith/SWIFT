@@ -22,3 +22,13 @@ docs/superpowers/
 # Local Netlify folder
 .netlify
 .worktrees/
+
+# Ignore root project metadata/docs files
+/PHASE_3_COMPLETE.md
+/PHASE_3_ROADMAP.md
+/PROJECT_DOCUMENTATION.md
+/QUICK_REFERENCE.md
+/railway.json
+/README_PHASE_3.md
+/README.md
+/TODO.md
