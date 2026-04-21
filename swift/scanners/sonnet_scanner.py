@@ -21,19 +21,63 @@ Source code:
 {source_code}
 ```
 
-Respond with ONLY valid JSON (no markdown, no explanation):
+RESPOND WITH ONLY VALID JSON (no markdown, no explanation):
+
+For each vulnerability found, extract the COMPLETE evidence bundle:
+
+1. **confidence** (0.0-1.0): Your confidence that this is a real vulnerability
+2. **vuln_type**: Category (sql_injection|command_injection|hardcoded_secret|weak_crypto|unsafe_deserialization|other)
+3. **description**: Precise description of the vulnerability
+4. **severity**: Level (critical|high|medium|low)
+5. **code_snippet**: The exact vulnerable line(s)
+6. **cwe_id**: CWE identifier (e.g., "CWE-89" for SQL injection)
+7. **cwe_url**: URL to CWE definition (https://cwe.mitre.org/data/definitions/{{number}}.html)
+8. **owasp_category**: Map to OWASP Top 10 2021 (e.g., "A03:2021 – Injection")
+9. **exploit_description**: Detailed explanation of how an attacker could exploit this
+10. **exploit_impact**: What an attacker can do (compromise, steal, execute, etc.)
+11. **remediation**: Step-by-step instructions to fix this vulnerability
+12. **remediation_code**: Code snippet showing the fixed version
+13. **remediation_effort**: Effort level (LOW|MEDIUM|HIGH) based on complexity
+14. **remediation_time_minutes**: Estimated minutes to fix (5-60 range)
+15. **references**: Array of URLs to OWASP/CWE security documentation
+
+RESPONSE FORMAT:
 {{
   "confidence": <float 0.0-1.0>,
-  "vuln_type": "<sql_injection|command_injection|hardcoded_secret|weak_crypto|unsafe_deserialization|other>",
-  "description": "<precise description of the vulnerability>",
+  "vuln_type": "<string>",
+  "description": "<string>",
   "severity": "<critical|high|medium|low>",
-  "code_snippet": "<the exact vulnerable line or lines>",
-  "cwe_id": "<optional CWE ID e.g. CWE-89>",
-  "exploit_description": "<optional: how an attacker could exploit this>",
-  "remediation": "<optional: how to fix this vulnerability>"
+  "code_snippet": "<string>",
+  "cwe_id": "<e.g., CWE-89>",
+  "cwe_url": "<https://cwe.mitre.org/data/definitions/XX.html>",
+  "owasp_category": "<e.g., A03:2021 – Injection>",
+  "exploit_description": "<string>",
+  "exploit_impact": "<string>",
+  "remediation": "<string>",
+  "remediation_code": "<string>",
+  "remediation_effort": "<LOW|MEDIUM|HIGH>",
+  "remediation_time_minutes": <integer 5-60>,
+  "references": ["<url1>", "<url2>", ...]
 }}
 
-If no vulnerability, return: {{"confidence": 0.0, "vuln_type": "none", "description": "clean", "severity": "low", "code_snippet": "", "cwe_id": null, "exploit_description": null, "remediation": null}}
+If NO vulnerability, return:
+{{
+  "confidence": 0.0,
+  "vuln_type": "none",
+  "description": "clean",
+  "severity": "low",
+  "code_snippet": "",
+  "cwe_id": null,
+  "cwe_url": null,
+  "owasp_category": null,
+  "exploit_description": null,
+  "exploit_impact": null,
+  "remediation": null,
+  "remediation_code": null,
+  "remediation_effort": null,
+  "remediation_time_minutes": null,
+  "references": []
+}}
 """
 
 
@@ -129,6 +173,22 @@ class SonnetAnalysisScanner:
             return None
 
         vuln_id = f"SWIFT-{next(self._counter):03d}"
+
+        # Parse remediation_time_minutes as integer
+        remediation_time = data.get("remediation_time_minutes")
+        if remediation_time is not None:
+            try:
+                remediation_time = int(remediation_time)
+            except (ValueError, TypeError):
+                remediation_time = None
+
+        # Parse references as list
+        references = data.get("references", [])
+        if references is None:
+            references = []
+        elif not isinstance(references, list):
+            references = []
+
         return Vulnerability(
             id=vuln_id,
             file_path=file_path,
@@ -139,6 +199,13 @@ class SonnetAnalysisScanner:
             severity=data.get("severity", "medium").upper(),
             code_snippet=data.get("code_snippet", ""),
             cwe_id=data.get("cwe_id"),
+            cwe_url=data.get("cwe_url"),
+            owasp_category=data.get("owasp_category"),
             exploit_description=data.get("exploit_description"),
+            exploit_impact=data.get("exploit_impact"),
             remediation=data.get("remediation"),
+            remediation_code=data.get("remediation_code"),
+            remediation_effort=data.get("remediation_effort"),
+            remediation_time_minutes=remediation_time,
+            references=references,
         )
