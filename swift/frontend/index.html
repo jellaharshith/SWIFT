@@ -519,15 +519,18 @@
 
     .progress-fill {
       height: 100%;
-      width: 40%;
+      width: 0%;
       background: var(--accent-green);
       border-radius: 3px;
-      animation: slide 2s ease-in-out infinite;
+      transition: width 0.5s ease;
     }
 
-    @keyframes slide {
-      0% { transform: translateX(-200%); }
-      100% { transform: translateX(350%); }
+    .progress-label {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-align: right;
+      margin-top: 0.3rem;
     }
 
     .elapsed {
@@ -704,6 +707,94 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
+    }
+
+    /* ── Summary Report Panel ── */
+    .summary-panel {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .summary-headline {
+      font-size: 1.75rem;
+      font-weight: 700;
+      font-family: var(--mono);
+      margin-bottom: 1.25rem;
+      color: var(--text-primary);
+    }
+
+    .summary-headline.has-critical { color: var(--critical); }
+    .summary-headline.has-high { color: var(--high); }
+    .summary-headline.clean { color: var(--low); }
+
+    .summary-sev-boxes {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.25rem;
+    }
+
+    .sev-box {
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      border-radius: 7px;
+      padding: 0.75rem 1.25rem;
+      min-width: 90px;
+      text-align: center;
+    }
+
+    .sev-box .sev-box-count {
+      font-family: var(--mono);
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .sev-box .sev-box-label {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .sev-box.critical { border-color: var(--critical); }
+    .sev-box.critical .sev-box-count { color: var(--critical); }
+    .sev-box.high { border-color: var(--high); }
+    .sev-box.high .sev-box-count { color: var(--high); }
+    .sev-box.medium { border-color: var(--medium); }
+    .sev-box.medium .sev-box-count { color: var(--medium); }
+    .sev-box.low { border-color: var(--low); }
+    .sev-box.low .sev-box-count { color: var(--low); }
+
+    .summary-meta-row {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      align-items: center;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .summary-meta-item {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .summary-meta-item strong {
+      color: var(--text-secondary);
+    }
+
+    .summary-dl-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-wrap: wrap;
     }
 
     /* Section headers */
@@ -1060,6 +1151,43 @@
       margin-top: 0.75rem;
       font-family: var(--mono);
     }
+
+    /* ── File Preview Modal ── */
+    #file-modal-overlay { display:none; position:fixed; inset:0;
+      background:rgba(8,11,15,0.82); backdrop-filter:blur(3px);
+      z-index:1000; align-items:center; justify-content:center; }
+    #file-modal-overlay.open { display:flex; }
+    .file-modal { background:var(--surface); border:1px solid var(--border-bright);
+      border-radius:10px; width:min(92vw,820px); max-height:82vh;
+      display:flex; flex-direction:column; overflow:hidden;
+      box-shadow:0 24px 80px rgba(0,0,0,0.6); }
+    .modal-header { display:flex; align-items:center; gap:0.75rem; padding:0.875rem 1rem;
+      border-bottom:1px solid var(--border); background:var(--bg2); flex-shrink:0; }
+    .modal-filepath { font-family:var(--mono); font-size:0.78rem; color:var(--text-secondary);
+      flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .modal-lang-badge { font-family:var(--mono); font-size:0.6rem; font-weight:700;
+      text-transform:uppercase; letter-spacing:0.1em; padding:0.2rem 0.5rem;
+      border-radius:4px; background:rgba(14,165,233,0.1); color:var(--accent-blue);
+      border:1px solid rgba(14,165,233,0.3); flex-shrink:0; }
+    .modal-close { background:none; border:1px solid var(--border-bright); border-radius:4px;
+      color:var(--text-muted); font-family:var(--mono); font-size:0.8rem; width:26px; height:26px;
+      display:flex; align-items:center; justify-content:center; cursor:pointer;
+      transition:border-color 0.15s,color 0.15s; flex-shrink:0; }
+    .modal-close:hover { border-color:var(--critical); color:var(--critical); }
+    .modal-line-count { font-family:var(--mono); font-size:0.68rem; color:var(--text-muted); flex-shrink:0; }
+    .modal-body { overflow-y:auto; flex:1; }
+    .modal-code-table { width:100%; border-collapse:collapse;
+      font-family:var(--mono); font-size:0.78rem; line-height:1.65; }
+    .modal-code-table td { padding:0; border:none; vertical-align:top; }
+    .modal-code-table tr:hover td { background:rgba(255,255,255,0.03); }
+    .modal-code-table tr.vuln-line td { background:rgba(239,68,68,0.08);
+      border-left:3px solid var(--critical); }
+    .line-num-cell { width:3.5rem; min-width:3.5rem; text-align:right; padding:0 0.75rem 0 0.5rem;
+      color:var(--text-muted); user-select:none; font-size:0.72rem;
+      background:var(--bg2); border-right:1px solid var(--border); }
+    .line-code-cell { padding:0 1rem; white-space:pre; color:var(--text-secondary); }
+    .modal-code-table tr.vuln-line .line-num-cell { color:var(--critical); }
+    .modal-code-table tr.vuln-line .line-code-cell { color:var(--text-primary); }
   </style>
 </head>
 <body>
@@ -1178,7 +1306,8 @@
         <pre id="scan-log"></pre>
       </div>
 
-      <div class="progress-bar"><div class="progress-fill"></div></div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-label" id="progress-label"></div>
       <div class="elapsed" id="elapsed-display">[SCAN RUNNING — 00:00]</div>
     </div>
 
@@ -1232,6 +1361,9 @@
         <div class="sev-legend" id="sev-legend"></div>
       </div>
 
+      <!-- Summary Report Panel (populated by renderSummaryPanel) -->
+      <div id="summary-panel"></div>
+
       <!-- Vulnerability list -->
       <div id="vuln-section">
         <div class="section-header">
@@ -1266,6 +1398,21 @@
     </section>
 
   </main>
+
+  <!-- ── File Preview Modal ── -->
+  <div id="file-modal-overlay" role="dialog" aria-modal="true" aria-label="File Preview">
+    <div class="file-modal">
+      <div class="modal-header">
+        <span class="modal-filepath" id="modal-filepath"></span>
+        <span class="modal-lang-badge" id="modal-lang-badge">—</span>
+        <span class="modal-line-count" id="modal-line-count"></span>
+        <button class="modal-close" id="modal-close" title="Close (Esc)">✕</button>
+      </div>
+      <div class="modal-body">
+        <table class="modal-code-table"><tbody id="modal-code-tbody"></tbody></table>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
   <script>
@@ -1342,14 +1489,36 @@
     });
   }
 
-  function scheduleStages(withPatches) {
-    // Cosmetic stage advancement — each stage gets its own delay
-    const schedule = [[1, 15000], [2, 40000]];
-    if (withPatches) schedule.push([3, 75000]);
-    schedule.forEach(([idx, delay]) => {
-      state.stageTimeouts.push(setTimeout(() => activateStage(idx), delay));
-    });
+  function applyProgressUpdate(status) {
+    const stage = status.stage ?? 0;
+    const filesTotal = status.files_total ?? 0;
+    const filesScanned = status.files_scanned ?? 0;
+    const currentFile = status.current_file ?? '';
+
+    activateStage(stage);
+
+    const fill = document.getElementById('progress-fill');
+    const label = document.getElementById('progress-label');
+    if (fill && filesTotal > 0) {
+      const pct = Math.round((filesScanned / filesTotal) * 100);
+      fill.style.width = pct + '%';
+      if (label) label.textContent = `${filesScanned} / ${filesTotal} files`;
+    } else if (fill && parseFloat(fill.style.width) < 5) {
+      fill.style.width = '5%';
+    }
+
+    if (currentFile && currentFile !== applyProgressUpdate._lastFile) {
+      applyProgressUpdate._lastFile = currentFile;
+      const log = document.getElementById('scan-log');
+      if (log) {
+        const ts = new Date().toISOString().substr(11, 8);
+        const stagePrefix = ['TRIAGE', 'HAIKU', 'SONNET', 'PATCH'][stage] || 'SCAN';
+        log.textContent += `${ts}  [${stagePrefix}] Scanning ${currentFile}...\n`;
+        log.scrollTop = log.scrollHeight;
+      }
+    }
   }
+  applyProgressUpdate._lastFile = '';
 
   function startLoadingPhase(repoUrl, withPatches) {
     document.getElementById('loading-repo-url').textContent = repoUrl;
@@ -1366,7 +1535,6 @@
     state.stageTimeouts = [];
 
     showPhase('loading');
-    scheduleStages(withPatches);
 
     // Log appender
     state.logTimer = setInterval(() => {
@@ -1438,6 +1606,11 @@
 
         const status = await res.json();
 
+        if (status.status === 'running') {
+          applyProgressUpdate(status);
+          return;
+        }
+
         if (status.status === 'done') {
           stopPolling();
           state.currentScanId = status.scan_id;
@@ -1446,6 +1619,11 @@
           if (!detailRes.ok) throw new Error('Failed to fetch scan details');
           const detail = await detailRes.json();
           const parsed = JSON.parse(detail.raw_json);
+
+          const fill = document.getElementById('progress-fill');
+          if (fill) fill.style.width = '100%';
+          const label = document.getElementById('progress-label');
+          if (label) label.textContent = 'Complete';
 
           stopLoadingTimers();
           renderResults(parsed, status.scan_id);
@@ -1459,7 +1637,6 @@
           showError('Scan failed: ' + (status.detail || 'Unknown error'));
           resetButton();
         }
-        // status === 'running' → keep polling
       } catch (_) {
         // Network error — keep polling
       }
@@ -1501,6 +1678,49 @@
   // ══════════════════════════════════════════════
   // RESULTS RENDERER
   // ══════════════════════════════════════════════
+  function detectLanguage(filePath) {
+    const ext = (filePath || '').split('.').pop().toLowerCase();
+    return {py:'python', js:'javascript', jsx:'javascript', ts:'typescript',
+      tsx:'typescript', sh:'bash', go:'go', java:'java', rb:'ruby',
+      rs:'rust', php:'php', c:'c', cpp:'cpp', cs:'csharp',
+      yaml:'yaml', yml:'yaml', json:'json'}[ext] || 'plaintext';
+  }
+
+  function renderSummaryPanel(data, scanId) {
+    const panel = document.getElementById('summary-panel');
+    if (!panel) return;
+    const vulns = data.vulnerabilities || [];
+    const chains = data.exploit_chains || [];
+    const counts = {critical:0, high:0, medium:0, low:0};
+    vulns.forEach(v => { const k = v.severity.toLowerCase(); if (counts[k] !== undefined) counts[k]++; });
+    const riskScores = vulns.map(v => v.risk_score).filter(s => s != null);
+    const avgRisk = riskScores.length ? (riskScores.reduce((a,b)=>a+b,0)/riskScores.length).toFixed(1) : null;
+    const maxRisk = riskScores.length ? Math.max(...riskScores).toFixed(0) : null;
+    let hClass = 'clean';
+    if (counts.critical > 0) hClass = 'has-critical';
+    else if (counts.high > 0) hClass = 'has-high';
+    const sevBoxes = ['critical','high','medium','low']
+      .filter(k => counts[k] > 0)
+      .map(k => `<div class="sev-box ${k}"><div class="sev-box-count">${counts[k]}</div>
+        <div class="sev-box-label">${k.charAt(0).toUpperCase()+k.slice(1)}</div></div>`).join('');
+    panel.innerHTML = `
+      <div class="summary-panel">
+        <div class="summary-headline ${hClass}">
+          ${vulns.length === 0 ? '0 Vulnerabilities Found'
+            : `${vulns.length} Vulnerabilit${vulns.length===1?'y':'ies'} Found`}
+        </div>
+        <div class="summary-sev-boxes">${sevBoxes || '<span style="color:var(--low);font-family:var(--mono);font-size:0.8rem;">All clear — no findings.</span>'}</div>
+        <div class="summary-meta-row">
+          ${chains.length > 0 ? `<span class="summary-meta-item"><strong>${chains.length}</strong> exploit chain${chains.length>1?'s':''} detected</span>` : ''}
+          ${maxRisk != null ? `<span class="summary-meta-item">Max risk: <strong>${maxRisk}</strong>${avgRisk ? ` · Avg: <strong>${avgRisk}</strong>` : ''}</span>` : ''}
+          <div class="summary-dl-row">
+            <button class="btn-outline" onclick="downloadReport('json')">⬇ JSON Report</button>
+            <button class="btn-outline" onclick="downloadReport('markdown')">⬇ Markdown Report</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
   function renderResults(data, scanId) {
     state.currentScanId = scanId;
 
@@ -1536,6 +1756,9 @@
 
     // Severity bar
     renderSeverityBar(summary.by_severity, vulns);
+
+    // Summary panel
+    renderSummaryPanel(data, scanId);
 
     // Vuln list
     document.getElementById('vuln-count-badge').textContent = vulns.length;
@@ -1610,12 +1833,20 @@
       const confPct = Math.round(v.confidence * 100);
       const patchId = patchMap[v.id];
       const escapedSnippet = escapeHtml(v.code_snippet || '');
+      const lang = detectLanguage(v.file_path);
       return `
         <details class="vuln-item">
           <summary class="vuln-summary">
             <span class="sev-badge ${sevClass}">${v.severity}</span>
             <span class="vuln-type">${escapeHtml(v.vuln_type.replace(/_/g, ' '))}</span>
-            <span class="vuln-location">${escapeHtml(v.file_path)}:${v.line_number}</span>
+            <span class="vuln-location vuln-location-link"
+              data-file="${escapeHtml(v.file_path)}"
+              data-line="${v.line_number}"
+              data-snippet="${escapeHtml(v.code_snippet || '')}"
+              title="Click to preview file"
+              style="cursor:pointer;text-decoration:underline dotted;">
+              ${escapeHtml(v.file_path)}:${v.line_number}
+            </span>
             <div class="conf-bar-wrap">
               <div class="conf-bar"><div class="conf-fill" style="width:${confPct}%"></div></div>
               <span class="conf-pct">${confPct}%</span>
@@ -1624,7 +1855,7 @@
           </summary>
           <div class="vuln-body">
             <p class="vuln-desc">${escapeHtml(v.description)}</p>
-            <pre><code class="language-python">${escapedSnippet}</code></pre>
+            <pre><code class="language-${lang}">${escapedSnippet}</code></pre>
             ${patchId ? `<button class="view-patch-link" onclick="scrollToPatch('${escapeHtml(patchId)}')">→ View patch ${patchId}</button>` : ''}
           </div>
         </details>`;
@@ -1670,6 +1901,50 @@
   function scrollToPatch(patchId) {
     const el = document.getElementById('patch-' + patchId);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ══════════════════════════════════════════════
+  // FILE PREVIEW MODAL
+  // ══════════════════════════════════════════════
+  function openFileModal(filePath, codeSnippet, lineNumber) {
+    const overlay = document.getElementById('file-modal-overlay');
+    const tbody = document.getElementById('modal-code-tbody');
+    if (!overlay || !tbody) return;
+    const lang = detectLanguage(filePath);
+    document.getElementById('modal-filepath').textContent = filePath;
+    document.getElementById('modal-lang-badge').textContent = lang;
+    document.getElementById('modal-line-count').textContent = `Line ${lineNumber}`;
+    const lines = (codeSnippet || '').split('\n');
+    const snippetMidIdx = Math.floor(lines.length / 2);
+    const startLine = Math.max(1, lineNumber - snippetMidIdx);
+    tbody.innerHTML = '';
+    lines.forEach((rawLine, idx) => {
+      const displayLineNum = startLine + idx;
+      const isVulnLine = displayLineNum === lineNumber;
+      const tr = document.createElement('tr');
+      if (isVulnLine) tr.classList.add('vuln-line');
+      const numTd = document.createElement('td');
+      numTd.className = 'line-num-cell';
+      numTd.textContent = displayLineNum;
+      const codeTd = document.createElement('td');
+      codeTd.className = 'line-code-cell';
+      const codeEl = document.createElement('code');
+      codeEl.className = `language-${lang}`;
+      codeEl.textContent = rawLine;
+      codeTd.appendChild(codeEl);
+      tr.appendChild(numTd);
+      tr.appendChild(codeTd);
+      tbody.appendChild(tr);
+    });
+    tbody.querySelectorAll('code').forEach(el => hljs.highlightElement(el));
+    overlay.classList.add('open');
+    const vulnRow = tbody.querySelector('tr.vuln-line');
+    if (vulnRow) requestAnimationFrame(() => vulnRow.scrollIntoView({ block: 'center' }));
+  }
+
+  function closeFileModal() {
+    const overlay = document.getElementById('file-modal-overlay');
+    if (overlay) overlay.classList.remove('open');
   }
 
   // ══════════════════════════════════════════════
@@ -1859,6 +2134,28 @@
     document.addEventListener('click', e => {
       const btn = e.target.closest('.btn-view');
       if (btn) viewHistoryScan(btn.dataset.scanId);
+    });
+
+    // File preview modal: close button
+    document.getElementById('modal-close').addEventListener('click', closeFileModal);
+
+    // File preview modal: click-outside-to-close
+    document.getElementById('file-modal-overlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('file-modal-overlay')) closeFileModal();
+    });
+
+    // File preview modal: ESC key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeFileModal();
+    });
+
+    // File preview modal: delegated click on vuln-location-link
+    document.addEventListener('click', e => {
+      const loc = e.target.closest('.vuln-location-link');
+      if (loc) {
+        e.stopPropagation();
+        openFileModal(loc.dataset.file, loc.dataset.snippet, parseInt(loc.dataset.line, 10));
+      }
     });
 
     // Init
