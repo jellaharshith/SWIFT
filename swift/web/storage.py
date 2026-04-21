@@ -86,6 +86,8 @@ _REQUIRED_SCAN_JOB_COLUMNS: dict[str, str] = {
     "files_scanned": "INTEGER DEFAULT 0",
     "current_file": "TEXT",
     "detail": "TEXT",
+    "started_at": "TEXT",
+    "findings_json": "TEXT",
 }
 
 

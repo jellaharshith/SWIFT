@@ -37,6 +37,8 @@ _COLUMNS: list[tuple[str, str]] = [
     ("files_scanned", "INTEGER DEFAULT 0"),
     ("current_file", "TEXT"),
     ("detail", "TEXT"),
+    ("started_at", "TEXT"),
+    ("findings_json", "TEXT"),
 ]
 
 
