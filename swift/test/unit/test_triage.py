@@ -134,10 +134,12 @@ def test_triage_codebase_walks_directory():
         assert len(result) == 2
 
 
-def test_triage_codebase_skips_non_python():
+def test_triage_codebase_skips_unsupported_extensions():
+    # .txt is not in _SUPPORTED_EXTENSIONS — only the .py file should be flagged.
+    # Note: .js is now a supported extension (triage scans Python, JS, TS, C/C++).
     with tempfile.TemporaryDirectory() as tmpdir:
         _write_file(os.path.join(tmpdir, "a.py"), [SQL_FSTRING])
-        _write_file(os.path.join(tmpdir, "b.js"), [SQL_FSTRING])
+        _write_file(os.path.join(tmpdir, "b.txt"), [SQL_FSTRING])
         result = triage_codebase(tmpdir)
         assert len(result) == 1
 
