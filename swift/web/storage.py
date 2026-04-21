@@ -45,6 +45,14 @@ class ScanJob(Base):
     batch_total = Column(Integer, default=0, nullable=True)
     started_at = Column(String, nullable=True)                    # ISO timestamp
     findings_json = Column(Text, nullable=True)                   # JSON array of partial findings
+    # Chain-stage progress fields (Task 10)
+    chain_stage = Column(String, nullable=True)                   # e.g. "graph_build", "llm_enhance"
+    chain_nodes = Column(Integer, default=0, nullable=True)       # graph nodes created
+    chain_edges = Column(Integer, default=0, nullable=True)       # graph edges created
+    chain_candidates = Column(Integer, default=0, nullable=True)  # path candidates explored
+    ranked_chains = Column(Integer, default=0, nullable=True)     # final ranked chains
+    resource_limited = Column(Integer, default=0, nullable=True)  # 0=no, 1=yes (bool as int)
+    resource_limit_reason = Column(String, nullable=True)         # e.g. "memory_limit_hit"
 
 
 class ScanRecord(Base):
@@ -88,6 +96,14 @@ _REQUIRED_SCAN_JOB_COLUMNS: dict[str, str] = {
     "detail": "TEXT",
     "started_at": "TEXT",
     "findings_json": "TEXT",
+    # Chain-stage progress columns (Task 10)
+    "chain_stage": "TEXT",
+    "chain_nodes": "INTEGER DEFAULT 0",
+    "chain_edges": "INTEGER DEFAULT 0",
+    "chain_candidates": "INTEGER DEFAULT 0",
+    "ranked_chains": "INTEGER DEFAULT 0",
+    "resource_limited": "INTEGER DEFAULT 0",
+    "resource_limit_reason": "TEXT",
 }
 
 

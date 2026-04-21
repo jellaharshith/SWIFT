@@ -238,6 +238,18 @@ def _run_scan_sync(job_id: str, repo: str, patches: bool) -> None:
             }
             if payload.get("findings_json") is not None:
                 kwargs["findings_json"] = payload["findings_json"]
+            # Chain-stage fields (Task 10) — only update when present in payload
+            for chain_field in (
+                "chain_stage", "chain_nodes", "chain_edges",
+                "chain_candidates", "ranked_chains",
+                "resource_limited", "resource_limit_reason",
+            ):
+                if chain_field in payload:
+                    val = payload[chain_field]
+                    # resource_limited is a bool in the payload; store as int
+                    if chain_field == "resource_limited":
+                        val = 1 if val else 0
+                    kwargs[chain_field] = val
             update_scan_job(db, job_id, **kwargs)
 
         result = scan_codebase(
@@ -300,6 +312,14 @@ def get_scan_status(scan_id: str, db: Session = Depends(get_db)):
         "started_at": job.started_at,
         "detail": job.detail,
         "scan_id": job.detail if job.status == "done" else None,
+        # Chain-stage progress fields (Task 10)
+        "chain_stage": job.chain_stage or "",
+        "chain_nodes": job.chain_nodes or 0,
+        "chain_edges": job.chain_edges or 0,
+        "chain_candidates": job.chain_candidates or 0,
+        "ranked_chains": job.ranked_chains or 0,
+        "resource_limited": bool(job.resource_limited),
+        "resource_limit_reason": job.resource_limit_reason or "",
     }
 
 
