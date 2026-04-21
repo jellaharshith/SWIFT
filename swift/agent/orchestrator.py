@@ -95,13 +95,14 @@ def scan_codebase(
             with open(file_path, encoding="utf-8", errors="replace") as fh:
                 source = fh.read()
 
-            # Skip minified files and files too large for Haiku token limit
+            # Skip test files, minified files, and files too large for Haiku token limit
+            is_test_file = file_path.endswith((".spec.ts", ".spec.js", ".test.ts", ".test.js", ".spec.tsx", ".test.tsx"))
             is_minified = file_path.endswith((".min.js", ".min.css", ".min.ts"))
             file_size_kb = len(source) / 1024
             max_size_kb = 100  # ~50k tokens, safe margin from 200k limit
 
-            if is_minified or file_size_kb > max_size_kb:
-                logger.debug("Skip %s (minified=%s, size=%.1fKB)", file_path, is_minified, file_size_kb)
+            if is_test_file or is_minified or file_size_kb > max_size_kb:
+                logger.debug("Skip %s (test=%s, minified=%s, size=%.1fKB)", file_path, is_test_file, is_minified, file_size_kb)
                 continue
 
             suspicious = haiku.scan_lines(file_path, source, set(line_numbers))
