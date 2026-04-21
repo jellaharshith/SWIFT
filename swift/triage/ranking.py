@@ -20,6 +20,11 @@ from typing import List, Optional
 
 from agent.models import Vulnerability
 
+# Maximum findings to pass to expensive chain detection analysis.
+# Prevents timeouts from processing 600+ signals at once.
+# Only top 30 most risky findings analyzed for exploit chains.
+MAX_TRIAGE_FINDINGS = 30
+
 
 class RiskScorer:
     """Quantitative risk scoring engine for vulnerabilities.
@@ -228,3 +233,29 @@ class RiskScorer:
 
         # Default: moderate
         return 0.6
+
+    @staticmethod
+    def triage_findings(
+        vulns: List[Vulnerability],
+        max_findings: int = MAX_TRIAGE_FINDINGS,
+    ) -> List[Vulnerability]:
+        """Return top-ranked findings for expensive analysis (chain detection).
+
+        Prevents timeout by limiting vulnerabilities sent to LLM reasoning.
+        Only top findings by risk score are passed downstream.
+
+        Args:
+            vulns: All vulnerabilities detected.
+            max_findings: Maximum findings to return (default: 30).
+
+        Returns:
+            Top N vulnerabilities ranked by risk score.
+        """
+        if not vulns:
+            return []
+
+        # Rank all findings
+        ranked = RiskScorer.rank_vulnerabilities(vulns)
+
+        # Return top N
+        return [vuln for vuln, _ in ranked[:max_findings]]

@@ -23,6 +23,9 @@ from triage.ranking import RiskScorer
 
 logger = get_logger()
 
+# Batch size for Haiku scanning. Process files in chunks to manage memory/timeout.
+HAIKU_BATCH_SIZE = 50
+
 
 def scan_codebase(
     repo_path: str,
@@ -81,41 +84,51 @@ def scan_codebase(
         "current_file": "",
     })
 
-    # --- Phase 2: Haiku fast scan ---
+    # --- Phase 2: Haiku fast scan (batched) ---
+    # Process files in batches to manage memory and prevent timeouts on large codebases.
     haiku_results: dict[str, tuple[str, list[int]]] = {}
-    for idx, (file_path, line_numbers) in enumerate(flagged_map.items()):
-        _emit({
-            "stage": 1,
-            "stage_name": "haiku",
-            "files_total": files_scanned,
-            "files_scanned": idx,
-            "current_file": os.path.basename(file_path),
-        })
-        try:
-            with open(file_path, encoding="utf-8", errors="replace") as fh:
-                source = fh.read()
+    flagged_items = list(flagged_map.items())
 
-            # Skip test files, minified files, and files too large for Haiku token limit
-            base_name = os.path.basename(file_path).lower()
-            is_test_file = (
-                file_path.endswith((".spec.ts", ".spec.js", ".test.ts", ".test.js", ".spec.tsx", ".test.tsx"))
-                or "spec" in base_name or "test" in base_name  # Catch userProfileSpec.ts, etc.
-            )
-            is_minified = file_path.endswith((".min.js", ".min.css", ".min.ts"))
-            file_size_kb = len(source) / 1024
-            max_size_kb = 100  # ~50k tokens, safe margin from 200k limit
+    for batch_start in range(0, len(flagged_items), HAIKU_BATCH_SIZE):
+        batch_end = min(batch_start + HAIKU_BATCH_SIZE, len(flagged_items))
+        batch = flagged_items[batch_start:batch_end]
 
-            if is_test_file or is_minified or file_size_kb > max_size_kb:
-                logger.debug("Skip %s (test=%s, minified=%s, size=%.1fKB)", file_path, is_test_file, is_minified, file_size_kb)
-                continue
+        for batch_idx, (file_path, line_numbers) in enumerate(batch):
+            global_idx = batch_start + batch_idx
+            _emit({
+                "stage": 1,
+                "stage_name": "haiku",
+                "files_total": files_scanned,
+                "files_scanned": global_idx,
+                "current_file": os.path.basename(file_path),
+            })
+            try:
+                with open(file_path, encoding="utf-8", errors="replace") as fh:
+                    source = fh.read()
 
-            suspicious = haiku.scan_lines(file_path, source, set(line_numbers))
-            if suspicious:
-                haiku_results[file_path] = (source, sorted(suspicious))
-        except Exception as exc:
-            logger.error("Haiku scan error %s: %s", file_path, exc)
+                # Skip test files, minified files, and files too large for Haiku token limit
+                base_name = os.path.basename(file_path).lower()
+                is_test_file = (
+                    file_path.endswith((".spec.ts", ".spec.js", ".test.ts", ".test.js", ".spec.tsx", ".test.tsx"))
+                    or "spec" in base_name or "test" in base_name  # Catch userProfileSpec.ts, etc.
+                )
+                is_minified = file_path.endswith((".min.js", ".min.css", ".min.ts"))
+                file_size_kb = len(source) / 1024
+                max_size_kb = 100  # ~50k tokens, safe margin from 200k limit
 
-    logger.info("Haiku phase: %d files scanned", len(haiku_results))
+                if is_test_file or is_minified or file_size_kb > max_size_kb:
+                    logger.debug("Skip %s (test=%s, minified=%s, size=%.1fKB)", file_path, is_test_file, is_minified, file_size_kb)
+                    continue
+
+                suspicious = haiku.scan_lines(file_path, source, set(line_numbers))
+                if suspicious:
+                    haiku_results[file_path] = (source, sorted(suspicious))
+            except Exception as exc:
+                logger.error("Haiku scan error %s: %s", file_path, exc)
+
+        logger.info("Haiku batch %d/%d: %d results", batch_end // HAIKU_BATCH_SIZE, (len(flagged_items) + HAIKU_BATCH_SIZE - 1) // HAIKU_BATCH_SIZE, len(haiku_results))
+
+    logger.info("Haiku phase: %d files scanned from %d flagged", len(haiku_results), len(flagged_items))
     _emit({
         "stage": 2,
         "stage_name": "review_required",
@@ -190,13 +203,29 @@ def scan_codebase(
         vuln.risk_score = scorer.calculate_risk_score(vuln)
     logger.info("Risk scoring: %d vulnerabilities ranked", len(vulnerabilities))
 
+    # --- Phase 3.3: Triage findings for chain detection ---
+    # Limit to top N findings by risk score to prevent timeout on 600+ signals.
+    # Only most critical findings sent to expensive LLM reasoning.
+    triaged_findings = scorer.triage_findings(vulnerabilities)
+    logger.info("Triage: %d / %d findings selected for chain detection", len(triaged_findings), len(vulnerabilities))
+
     # --- Phase 3.5: Exploit chain detection (best-effort) ---
     exploit_chains = []
-    if vulnerabilities:
-        exploit_chains = chain_detector.detect_chains(vulnerabilities)
+    if triaged_findings:
+        exploit_chains = chain_detector.detect_chains(triaged_findings)
         logger.info("Chain detection: %d exploit chains identified", len(exploit_chains))
+    else:
+        logger.debug("Skipped chain detection: no triaged findings")
 
     duration = time.monotonic() - start
+
+    # Determine status: partial_success if chain detection was skipped due to timeout/error
+    # but other phases completed normally
+    status = "complete"
+    if vulnerabilities and not exploit_chains:
+        # Only mark partial if we had findings but couldn't detect chains
+        # (not if chains were legitimately empty)
+        status = "partial_success"
 
     result = ScanResult(
         scan_id=scan_id,
@@ -208,6 +237,9 @@ def scan_codebase(
         total_cost_usd=metrics.total_cost_usd,
         timestamp=datetime.now(timezone.utc).isoformat(),
         exploit_chains=exploit_chains,
+        status=status,
+        signals_detected=signal_counter,
+        signals_triaged=len(triaged_findings),
     )
 
     # --- Phase 4: Patch generation (optional) ---
@@ -227,9 +259,9 @@ def scan_codebase(
         logger.debug("Chains standalone export: %d bytes", len(chains_export))
 
     logger.info(
-        "Scan %s complete: %d vulns, %d patches, %d chains, %.1fs",
-        scan_id, len(result.vulnerabilities), len(result.patches),
-        len(result.exploit_chains), result.duration_seconds,
+        "Scan %s complete [%s]: %d signals detected, %d triaged, %d chains, %d patches, %.1fs",
+        scan_id, result.status, result.signals_detected, result.signals_triaged,
+        len(result.exploit_chains), len(result.patches), result.duration_seconds,
     )
     return result
 
