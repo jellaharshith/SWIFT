@@ -22,11 +22,14 @@ from output.formatters import JSONFormatter, MarkdownFormatter
 from web.oauth import exchange_code, get_github_auth_url, list_repos
 from web.storage import (
     create_engine_and_session,
+    create_scan_job,
     get_metrics,
     get_scan,
+    get_scan_job,
     get_scans,
     init_db,
     save_scan,
+    update_scan_job,
     _DB_PATH,
 )
 
@@ -35,10 +38,6 @@ _engine, SessionLocal = create_engine_and_session()
 
 # ── In-memory OAuth token store (MVP) ────────────────────────────────────────
 _tokens: dict[str, str] = {}  # session_id → access_token
-
-# ── In-memory scan status store ───────────────────────────────────────────────
-# job_id → {"status": "running"|"done"|"error", ...result fields when done}
-_scan_status: dict[str, dict] = {}
 
 # ── Templates ─────────────────────────────────────────────────────────────────
 _TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
@@ -212,26 +211,30 @@ def download_markdown_report(scan_id: str, db: Session = Depends(get_db)):
 
 
 def _run_scan(job_id: str, repo: str, patches: bool) -> None:
-    """Background task: run scan, save to DB, update status store."""
+    """Background task: run scan, save to DB, persist status."""
     from agent.github_cloner import clone_repo, is_github_url
 
     cleanup = None
     db = SessionLocal()
     try:
+        create_scan_job(db, job_id)
+
         if is_github_url(repo):
             repo_path, cleanup = clone_repo(repo)
         else:
             repo_path = repo
 
         def progress_callback(payload: dict) -> None:
-            """Update scan status with real-time progress from orchestrator."""
-            _scan_status[job_id].update({
-                "stage": payload.get("stage", 0),
-                "stage_name": payload.get("stage_name", ""),
-                "files_total": payload.get("files_total", 0),
-                "files_scanned": payload.get("files_scanned", 0),
-                "current_file": payload.get("current_file", ""),
-            })
+            """Update scan job progress in database."""
+            update_scan_job(
+                db,
+                job_id,
+                stage=payload.get("stage", 0),
+                stage_name=payload.get("stage_name", ""),
+                files_total=payload.get("files_total", 0),
+                files_scanned=payload.get("files_scanned", 0),
+                current_file=payload.get("current_file", ""),
+            )
 
         result = scan_codebase(
             repo_path,
@@ -239,19 +242,14 @@ def _run_scan(job_id: str, repo: str, patches: bool) -> None:
             progress_callback=progress_callback,
         )
         save_scan(db, result)
-        _scan_status[job_id] = {
-            "status": "done",
-            "scan_id": result.scan_id,
-            "repo_path": result.repo_path,
-            "files_scanned": result.files_scanned,
-            "vuln_count": len(result.vulnerabilities),
-            "patch_count": len(result.patches),
-            "duration_seconds": result.duration_seconds,
-            "cost_usd": result.total_cost_usd,
-            "timestamp": result.timestamp,
-        }
+        update_scan_job(
+            db,
+            job_id,
+            status="done",
+            detail=result.scan_id,  # Store scan_id for lookup
+        )
     except Exception as exc:
-        _scan_status[job_id] = {"status": "error", "detail": str(exc)}
+        update_scan_job(db, job_id, status="error", detail=str(exc))
     finally:
         if cleanup is not None:
             cleanup()
@@ -261,17 +259,25 @@ def _run_scan(job_id: str, repo: str, patches: bool) -> None:
 @app.post("/scan")
 def trigger_scan(body: ScanRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
-    _scan_status[job_id] = {"status": "running"}
     background_tasks.add_task(_run_scan, job_id, body.repo, body.patches)
     return {"scan_id": job_id, "status": "running"}
 
 
 @app.get("/scan/{scan_id}/status")
-def get_scan_status(scan_id: str):
-    status = _scan_status.get(scan_id)
-    if not status:
+def get_scan_status(scan_id: str, db: Session = Depends(get_db)):
+    job = get_scan_job(db, scan_id)
+    if not job:
         raise HTTPException(status_code=404, detail=f"Job {scan_id} not found.")
-    return status
+    return {
+        "status": job.status,
+        "stage": job.stage,
+        "stage_name": job.stage_name,
+        "files_total": job.files_total,
+        "files_scanned": job.files_scanned,
+        "current_file": job.current_file,
+        "detail": job.detail,
+        "scan_id": job.detail if job.status == "done" else None,
+    }
 
 
 @app.get("/auth/github")
