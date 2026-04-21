@@ -1567,7 +1567,7 @@
   // ══════════════════════════════════════════════
   // SCAN EXECUTION
   // ══════════════════════════════════════════════
-  const MAX_POLL_MS = 30 * 60 * 1000; // 30 minutes (for large repos)
+  const MAX_POLL_MS = 5 * 60 * 1000; // 5 minutes (MVP: fast-scan with Haiku)
 
   function showError(msg) {
     const errEl = document.getElementById('scan-error');
@@ -1595,7 +1595,7 @@
         stopPolling();
         stopLoadingTimers();
         showPhase('input');
-        showError('Scan timed out (exceeded 30 min). Very large repos may need longer. Check back later or reduce repo size.');
+        showError('Scan timed out. Keep repos under 50k LOC for fast MVP scanning.');
         resetButton();
         return;
       }
