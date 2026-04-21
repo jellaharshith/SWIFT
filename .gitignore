@@ -26,6 +26,7 @@ docs/superpowers/
 # Keep project-local docs/metadata out of GitHub
 /PHASE_3_COMPLETE.md
 /PHASE_3_ROADMAP.md
+/PROJECT_DOCUMENTATION.md
 /QUICK_REFERENCE.md
 /README_PHASE_3.md
 /TODO.md
