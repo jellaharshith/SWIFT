@@ -159,7 +159,8 @@ class SonnetAnalysisScanner:
         json_str = self._extract_json(raw)
         try:
             data = json.loads(json_str)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.debug("Sonnet JSON parse error %s:%d: %s (response: %.100s)", file_path, line_number, str(e), raw)
             logger.warning("Sonnet returned invalid JSON for %s:%d", file_path, line_number)
             return None
 
@@ -221,13 +222,15 @@ class SonnetAnalysisScanner:
         - ```json {...}```
         - ```{...}```
         - Raw JSON
+        - Partial JSON (greedy match from first { to last })
         """
         # Try markdown code blocks first
         match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', raw)
         if match:
             return match.group(1)
 
-        # Try raw JSON (find { and })
+        # Try raw JSON: greedy match from first { to last }
+        # This handles malformed JSON with extra text
         match = re.search(r'\{[\s\S]*\}', raw)
         if match:
             return match.group(0)
