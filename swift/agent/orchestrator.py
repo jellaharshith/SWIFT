@@ -21,8 +21,12 @@ from patches.generator import PatchGenerator
 from sandbox.docker_runner import DockerSandbox
 from scanners.haiku_scanner import HaikuTriageScanner
 from scanners.sonnet_scanner import SonnetAnalysisScanner
+from triage.exploit_graph import MAX_CHAIN_CANDIDATES
 from triage.patterns import triage_codebase
 from triage.ranking import RiskScorer
+
+# Sentinel alias used in log/emit calls (avoids importing twice)
+MAX_CHAIN_CANDIDATES_SENTINEL = MAX_CHAIN_CANDIDATES
 
 logger = get_logger()
 
@@ -245,27 +249,78 @@ def scan_codebase(
     triaged_findings = scorer.triage_findings(vulnerabilities)
     logger.info("Triage: %d / %d findings selected for chain detection", len(triaged_findings), len(vulnerabilities))
 
-    # --- Phase 3.5: Exploit chain detection and ranking ---
+    # --- Phase 3.5: Bounded exploit graph + chain detection ---
+    # Architecture: deterministic graph pipeline first, LLM enhances narrative only.
+    # Memory guards prevent OOM; partial results are preserved on any resource limit.
     exploit_chains = []
     ranked_findings: List[Vulnerability] = []
     chain_detection_error: Optional[str] = None
+    chain_stage_metrics: dict = {}
+
     if triaged_findings:
+        _emit({
+            "stage": 3,
+            "stage_name": "chain_graph_build",
+            "files_total": len(triaged_findings),
+            "files_scanned": 0,
+            "current_file": "",
+            "progress": 95,
+            "chain_stage": "graph_build",
+            "chain_nodes": 0,
+            "chain_edges": 0,
+            "chain_candidates": 0,
+            "ranked_chains": 0,
+        })
         try:
-            # First pass: deterministic graph-based chain discovery and ranking.
+            # Pass 1: deterministic bounded graph — builds chains without LLM.
             audit = chain_auditor.audit(triaged_findings)
             exploit_chains = audit.exploit_chains
             ranked_findings = audit.ranked_findings
-
-            # Optional second pass: LLM chain detector can append additional context.
-            llm_chains = chain_detector.detect_chains(triaged_findings)
-            if llm_chains:
-                exploit_chains.extend(llm_chains)
+            chain_stage_metrics = audit.graph_metrics
 
             logger.info(
-                "Chain detection: %d exploit chains identified, %d ranked findings",
+                "[CHAIN-STAGE] Graph: nodes=%d edges=%d candidates=%d "
+                "ranked_chains=%d status=%s reason=%s",
+                chain_stage_metrics.get("graph_nodes", 0),
+                chain_stage_metrics.get("graph_edges", 0),
+                MAX_CHAIN_CANDIDATES_SENTINEL,
                 len(exploit_chains),
-                len(ranked_findings),
+                audit.status,
+                audit.reason or "none",
             )
+
+            _emit({
+                "stage": 3,
+                "stage_name": "chain_llm_enhance",
+                "files_total": len(triaged_findings),
+                "files_scanned": len(triaged_findings),
+                "current_file": "",
+                "progress": 97,
+                "chain_stage": "llm_enhance",
+                "chain_nodes": chain_stage_metrics.get("graph_nodes", 0),
+                "chain_edges": chain_stage_metrics.get("graph_edges", 0),
+                "chain_candidates": MAX_CHAIN_CANDIDATES_SENTINEL,
+                "ranked_chains": len(exploit_chains),
+                "resource_limited": audit.status == "partial",
+                "resource_limit_reason": audit.reason,
+            })
+
+            # Pass 2: LLM enhances narrative of pre-built chains (optional).
+            # On parse failure the original deterministic chains are returned unchanged.
+            if exploit_chains:
+                enhanced = chain_detector.enhance_chains(exploit_chains)
+                if enhanced:
+                    exploit_chains = enhanced
+
+            if audit.status == "partial":
+                chain_detection_error = audit.reason
+
+            logger.info(
+                "[CHAIN-STAGE] Complete: %d chains, %d ranked findings, "
+                "resource_limited=%s",
+                len(exploit_chains), len(ranked_findings), audit.status == "partial",
+            )
+
         except Exception as exc:
             chain_detection_error = str(exc)
             logger.error(
@@ -273,21 +328,34 @@ def scan_codebase(
                 scan_id,
                 len(triaged_findings),
                 chain_detection_error,
+                exc_info=True,
             )
     else:
-        logger.debug("Skipped chain detection: no triaged findings")
+        logger.info("[CHAIN-STAGE] Skipped: no triaged findings")
 
     duration = time.monotonic() - start
 
-    # Determine status: partial_success if chain detection was skipped due to timeout/error
-    # but other phases completed normally
+    # Determine status: partial_success when chain detection hit a resource limit
+    # or a hard error. Legitimate empty chains (no connections in graph) are "complete".
     status = "complete"
-    if vulnerabilities and not exploit_chains:
-        # Only mark partial if we had findings but couldn't detect chains
-        # (not if chains were legitimately empty)
-        status = "partial_success"
     if chain_detection_error:
         status = "partial_success"
+
+    _emit({
+        "stage": 3,
+        "stage_name": "chain_complete",
+        "files_total": len(triaged_findings),
+        "files_scanned": len(triaged_findings),
+        "current_file": "",
+        "progress": 99,
+        "chain_stage": "complete",
+        "chain_nodes": chain_stage_metrics.get("graph_nodes", 0),
+        "chain_edges": chain_stage_metrics.get("graph_edges", 0),
+        "chain_candidates": MAX_CHAIN_CANDIDATES_SENTINEL,
+        "ranked_chains": len(exploit_chains),
+        "resource_limited": bool(chain_detection_error),
+        "resource_limit_reason": chain_detection_error or "",
+    })
 
     result = ScanResult(
         scan_id=scan_id,
