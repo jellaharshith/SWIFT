@@ -1,6 +1,6 @@
 import logging
 import pytest
-from log.logger import get_logger, MetricsCollector
+from log.logger import get_logger, MetricsCollector, _LowercaseLevelFormatter
 
 
 def test_setup_logging_returns_logger():
@@ -39,6 +39,31 @@ def test_metrics_collector_vuln_tracking():
     assert m.vulnerability_count == 2
 
 
+def _test_logger_level_lowercase(level_name: str, log_method: str) -> None:
+    """Helper: Test that a log level outputs lowercase name.
+
+    Args:
+        level_name: Level name in uppercase (e.g., "WARNING")
+        log_method: Logger method name (e.g., "warning")
+    """
+    import io
+
+    logger = get_logger(f"test_{level_name.lower()}")
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(
+        _LowercaseLevelFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    )
+    logger.handlers = [handler]
+
+    getattr(logger, log_method)(f"test {level_name.lower()}")
+    output = stream.getvalue()
+
+    # Verify lowercase
+    assert f"[{level_name.lower()}]" in output
+    assert f"[{level_name}]" not in output
+
+
 def test_logger_info_uses_lowercase_info(capsys):
     """Verify [info] not [INFO] in log output."""
     logger = get_logger("test_info")
@@ -48,39 +73,36 @@ def test_logger_info_uses_lowercase_info(capsys):
     assert "[INFO]" not in captured.err
 
 
-def test_logger_warning_uses_lowercase():
-    """Verify [warning] not [WARNING] in log output."""
+def test_logger_warning_uses_lowercase() -> None:
+    """Verify WARNING logs output [warning] not [WARNING]."""
+    _test_logger_level_lowercase("WARNING", "warning")
+
+
+def test_logger_error_uses_lowercase() -> None:
+    """Verify ERROR logs output [error] not [ERROR]."""
+    _test_logger_level_lowercase("ERROR", "error")
+
+
+def test_logger_custom_level_uses_lowercase() -> None:
+    """Verify custom log levels are also lowercased."""
     import io
 
-    logger = get_logger("test_warning")
+    # Register custom level
+    custom_level = 25
+    level_name = "CUSTOM"
+    logging.addLevelName(custom_level, level_name)
+
+    logger = get_logger("test_custom_level")
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
-    handler.setLevel(logging.WARNING)
+    handler.setFormatter(
+        _LowercaseLevelFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    )
+    logger.handlers = [handler]
 
-    from log.logger import _LowercaseLevelFormatter
-    handler.setFormatter(_LowercaseLevelFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-    logger.addHandler(handler)
-
-    logger.warning("test warning")
+    # Log at custom level
+    logger.log(custom_level, "test custom level")
     output = stream.getvalue()
-    assert "[warning]" in output
-    assert "[WARNING]" not in output
 
-
-def test_logger_error_uses_lowercase():
-    """Verify [error] not [ERROR] in log output."""
-    import io
-
-    logger = get_logger("test_error")
-    stream = io.StringIO()
-    handler = logging.StreamHandler(stream)
-    handler.setLevel(logging.ERROR)
-
-    from log.logger import _LowercaseLevelFormatter
-    handler.setFormatter(_LowercaseLevelFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
-    logger.addHandler(handler)
-
-    logger.error("test error")
-    output = stream.getvalue()
-    assert "[error]" in output
-    assert "[ERROR]" not in output
+    # Should be lowercase
+    assert "[custom]" in output.lower()

@@ -25,12 +25,30 @@ class _JSONFormatter(logging.Formatter):
 
 
 class _LowercaseLevelFormatter(logging.Formatter):
-    """Format logs with lowercase level names: [info], [warning], [error]"""
+    """Format logs with lowercase level names for container stdout.
+
+    Transforms log level names from standard uppercase (INFO, WARNING, ERROR)
+    to lowercase (info, warning, error) to match container log aggregation
+    expectations.
+
+    Example:
+        2026-04-21 10:15:32,123 [info] swift: Scan started
+        2026-04-21 10:15:33,456 [warning] swift: Retry needed
+        2026-04-21 10:15:34,789 [error] swift: Fatal error
+
+    IMPORTANT: This temporarily modifies LogRecord.levelname during formatting,
+    then restores the original. Safe for multiple handlers on the same logger.
+    If you have external handlers that expect standard uppercase levels,
+    they will receive the restored original value.
+    """
 
     def format(self, record: logging.LogRecord) -> str:
-        # Lowercase the level name before formatting
+        # Temporarily lowercase the level name before formatting
+        original_levelname = record.levelname
         record.levelname = record.levelname.lower()
-        return super().format(record)
+        result = super().format(record)
+        record.levelname = original_levelname  # Restore original
+        return result
 
 
 def get_logger(name: str = "swift") -> logging.Logger:
