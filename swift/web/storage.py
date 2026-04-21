@@ -4,9 +4,10 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from sqlalchemy import Column, Float, Integer, String, create_engine, func
+from sqlalchemy import Column, Float, Integer, String, Text, create_engine, func
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from agent.models import ScanResult
@@ -30,13 +31,20 @@ class ScanJob(Base):
     __tablename__ = "scan_jobs"
 
     job_id = Column(String, primary_key=True)
-    status = Column(String, nullable=False)  # "running", "done", "error"
+    status = Column(String, nullable=False)  # "queued", "running", "done", "error"
     stage = Column(Integer, default=0)
     stage_name = Column(String, default="")
     files_total = Column(Integer, default=0)
     files_scanned = Column(Integer, default=0)
     current_file = Column(String, default="")
-    detail = Column(String, nullable=True)  # error message if status="error"
+    detail = Column(String, nullable=True)  # scan_id when done, error message when error
+    # Extended progress fields
+    progress = Column(Integer, default=0, nullable=True)          # 0–100 percent
+    signals_detected = Column(Integer, default=0, nullable=True)
+    batch_current = Column(Integer, default=0, nullable=True)
+    batch_total = Column(Integer, default=0, nullable=True)
+    started_at = Column(String, nullable=True)                    # ISO timestamp
+    findings_json = Column(Text, nullable=True)                   # JSON array of partial findings
 
 
 class ScanRecord(Base):
@@ -140,7 +148,7 @@ def get_scan(session: Session, scan_id: str) -> Optional[ScanRecord]:
 
 
 def create_scan_job(session: Session, job_id: str) -> ScanJob:
-    """Create a new scan job record in running state.
+    """Create a new scan job record in queued state.
 
     Args:
         session: Active SQLAlchemy session.
@@ -149,7 +157,11 @@ def create_scan_job(session: Session, job_id: str) -> ScanJob:
     Returns:
         The newly created ScanJob record.
     """
-    job = ScanJob(job_id=job_id, status="running")
+    job = ScanJob(
+        job_id=job_id,
+        status="queued",
+        started_at=datetime.now(timezone.utc).isoformat(),
+    )
     session.add(job)
     session.commit()
     return job
