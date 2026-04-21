@@ -1,4 +1,4 @@
 """Exploit chain detection module."""
-from swift.chains.detector import ExploitChainDetector
+from .detector import ExploitChainDetector
 
 __all__ = ["ExploitChainDetector"]

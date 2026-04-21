@@ -5,7 +5,7 @@ import itertools
 import json
 from typing import Any, List, Optional
 
-from agent.models import ExploitChain, Vulnerability
+from agent.models import AttackStep, ExploitChain, Vulnerability
 from log.logger import get_logger
 
 logger = get_logger()
@@ -33,6 +33,20 @@ Respond with ONLY valid JSON array (no markdown, no explanation):
     "name": "SQL Injection → Auth Bypass → Admin Access",
     "vulnerability_ids": ["SWIFT-001", "SWIFT-003"],
     "attack_path": "1. Exploit SQL injection in login query to bypass authentication\\n2. Access admin panel without credentials\\n3. Modify user roles to grant admin access",
+    "attack_steps": [
+      {{
+        "step": 1,
+        "description": "Exploit SQL injection in login query to bypass authentication",
+        "vuln_id": "SWIFT-001",
+        "entry_point": "auth/views.py:42"
+      }},
+      {{
+        "step": 2,
+        "description": "Access admin panel without credentials",
+        "vuln_id": "SWIFT-003",
+        "entry_point": "admin/views.py:15"
+      }}
+    ],
     "entry_point": "auth/views.py:42",
     "impact": "Full admin access without credentials",
     "severity": "CRITICAL",
@@ -159,6 +173,24 @@ class ExploitChainDetector:
                     continue
 
                 chain_id = item.get("chain_id") or f"CHAIN-{next(self._counter):03d}"
+
+                # Parse attack steps if present
+                attack_steps = []
+                if "attack_steps" in item and isinstance(item["attack_steps"], list):
+                    for step_data in item["attack_steps"]:
+                        try:
+                            attack_steps.append(
+                                AttackStep(
+                                    step=step_data.get("step", len(attack_steps) + 1),
+                                    description=step_data.get("description", ""),
+                                    vuln_id=step_data.get("vuln_id", ""),
+                                    entry_point=step_data.get("entry_point", ""),
+                                )
+                            )
+                        except Exception as e:
+                            logger.debug("Failed to parse attack step: %s", e)
+                            continue
+
                 chain = ExploitChain(
                     chain_id=chain_id,
                     name=item.get("name", "Unknown chain"),
@@ -168,6 +200,7 @@ class ExploitChainDetector:
                     impact=item.get("impact", ""),
                     severity=item.get("severity", "MEDIUM").upper(),
                     confidence=float(confidence),
+                    attack_steps=attack_steps,
                 )
                 chains.append(chain)
             except Exception as e:

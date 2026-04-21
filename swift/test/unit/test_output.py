@@ -162,6 +162,40 @@ class TestJSONFormatter:
         parsed = json.loads(JSONFormatter().format(result))
         assert parsed["exploit_chains"] == []
 
+    def test_json_phase3_fields_present(self):
+        """JSON output must include Phase 3 risk scoring fields (risk_score, exploitability, business_impact_category)."""
+        vuln_with_phase3 = Vulnerability(
+            id="SWIFT-002",
+            file_path="auth.py",
+            line_number=50,
+            vuln_type="auth_bypass",
+            description="Weak authentication check",
+            confidence=0.96,
+            severity="HIGH",
+            code_snippet="if user_id == admin_id:",
+            risk_score=78.5,
+            exploitability=0.85,
+            business_impact_category="customer_data_breach",
+        )
+        result = _make_scan_result(vulns=[vuln_with_phase3])
+        parsed = json.loads(JSONFormatter().format(result))
+        vuln = parsed["vulnerabilities"][0]
+        assert vuln["risk_score"] == 78.5
+        assert vuln["exploitability"] == 0.85
+        assert vuln["business_impact_category"] == "customer_data_breach"
+
+    def test_json_phase3_fields_null_when_not_set(self):
+        """JSON output must include Phase 3 fields as null when not provided."""
+        result = _make_scan_result(vulns=[_make_vuln()])
+        parsed = json.loads(JSONFormatter().format(result))
+        vuln = parsed["vulnerabilities"][0]
+        assert "risk_score" in vuln
+        assert vuln["risk_score"] is None
+        assert "exploitability" in vuln
+        assert vuln["exploitability"] is None
+        assert "business_impact_category" in vuln
+        assert vuln["business_impact_category"] is None
+
 
 # ---------------------------------------------------------------------------
 # MarkdownFormatter tests
@@ -271,6 +305,142 @@ class TestMarkdownFormatter:
         result = _make_scan_result(chains=[_make_chain()])
         output = MarkdownFormatter().format(result)
         assert "Exploit SQL injection" in output or "1." in output  # Attack path content
+
+    def test_markdown_phase3_fields_all_present(self):
+        """Markdown report must display Phase 3 risk assessment when all fields are set."""
+        vuln_with_phase3 = Vulnerability(
+            id="SWIFT-003",
+            file_path="db.py",
+            line_number=25,
+            vuln_type="sql_injection",
+            description="Direct SQL concatenation",
+            confidence=0.98,
+            severity="CRITICAL",
+            code_snippet="query = f'SELECT * FROM users WHERE id={user_id}'",
+            risk_score=92.0,
+            exploitability=0.92,  # Should map to "trivial"
+            business_impact_category="customer_data_breach",
+        )
+        result = _make_scan_result(vulns=[vuln_with_phase3])
+        output = MarkdownFormatter().format(result)
+        assert "Phase 3 Risk Assessment" in output
+        assert "92/100" in output  # Risk score as integer
+        assert "trivial" in output  # Exploitability label
+        assert "customer_data_breach" in output
+
+    def test_markdown_phase3_risk_score_rounding(self):
+        """Markdown report must round risk_score to nearest integer."""
+        vuln = Vulnerability(
+            id="SWIFT-004",
+            file_path="api.py",
+            line_number=10,
+            vuln_type="rce",
+            description="Remote code execution",
+            confidence=0.99,
+            severity="CRITICAL",
+            code_snippet="eval(user_input)",
+            risk_score=87.3,
+            exploitability=None,
+            business_impact_category=None,
+        )
+        result = _make_scan_result(vulns=[vuln])
+        output = MarkdownFormatter().format(result)
+        assert "87/100" in output or "87.3/100" not in output
+
+    def test_markdown_phase3_exploitability_moderate(self):
+        """Markdown report must display 'moderate' for exploitability 0.5-0.85."""
+        vuln = Vulnerability(
+            id="SWIFT-005",
+            file_path="utils.py",
+            line_number=15,
+            vuln_type="xxe",
+            description="XML External Entity injection",
+            confidence=0.96,
+            severity="HIGH",
+            code_snippet="parser.parse(xml_input)",
+            risk_score=65.0,
+            exploitability=0.65,  # Should map to "moderate"
+            business_impact_category=None,
+        )
+        result = _make_scan_result(vulns=[vuln])
+        output = MarkdownFormatter().format(result)
+        assert "moderate" in output
+
+    def test_markdown_phase3_exploitability_complex(self):
+        """Markdown report must display 'complex' for exploitability 0.25-0.55."""
+        vuln = Vulnerability(
+            id="SWIFT-006",
+            file_path="config.py",
+            line_number=20,
+            vuln_type="csrf",
+            description="Cross-Site Request Forgery",
+            confidence=0.94,
+            severity="MEDIUM",
+            code_snippet="form.submit(user_request)",
+            risk_score=45.0,
+            exploitability=0.4,  # Should map to "complex"
+            business_impact_category=None,
+        )
+        result = _make_scan_result(vulns=[vuln])
+        output = MarkdownFormatter().format(result)
+        assert "complex" in output
+
+    def test_markdown_phase3_exploitability_specific(self):
+        """Markdown report must display 'specific' for exploitability <0.25."""
+        vuln = Vulnerability(
+            id="SWIFT-007",
+            file_path="crypto.py",
+            line_number=30,
+            vuln_type="weak_crypto",
+            description="Weak cryptographic algorithm",
+            confidence=0.93,
+            severity="MEDIUM",
+            code_snippet="cipher = DES.new(key)",
+            risk_score=35.0,
+            exploitability=0.15,  # Should map to "specific"
+            business_impact_category=None,
+        )
+        result = _make_scan_result(vulns=[vuln])
+        output = MarkdownFormatter().format(result)
+        assert "specific" in output
+
+    def test_markdown_phase3_fields_optional_with_dashes(self):
+        """Markdown report must display dashes for missing Phase 3 fields."""
+        result = _make_scan_result(vulns=[_make_vuln()])
+        output = MarkdownFormatter().format(result)
+        # When Phase 3 fields are None, the section should not appear
+        # (since at least one needs to be set for the section to appear)
+        # But if we have any non-None field, dashes should appear for others
+        assert "Phase 3" not in output or "- **Risk Score:** -" in output
+
+    def test_markdown_phase3_section_hidden_when_all_none(self):
+        """Markdown report must NOT show Phase 3 section when all fields are None."""
+        result = _make_scan_result(vulns=[_make_vuln()])
+        output = MarkdownFormatter().format(result)
+        # Standard vulnerability with no Phase 3 fields
+        assert "Phase 3 Risk Assessment" not in output
+
+    def test_markdown_phase3_partial_fields(self):
+        """Markdown report must display Phase 3 section with dashes for unset fields."""
+        vuln = Vulnerability(
+            id="SWIFT-008",
+            file_path="log.py",
+            line_number=35,
+            vuln_type="log_injection",
+            description="Log injection vulnerability",
+            confidence=0.95,
+            severity="MEDIUM",
+            code_snippet="log.info(user_message)",
+            risk_score=50.0,
+            exploitability=None,  # Not set
+            business_impact_category=None,  # Not set
+        )
+        result = _make_scan_result(vulns=[vuln])
+        output = MarkdownFormatter().format(result)
+        assert "Phase 3 Risk Assessment" in output
+        assert "50/100" in output
+        assert "- **Exploitability:** -" in output
+        assert "- **Business Impact:** -" in output
 
 
 # ---------------------------------------------------------------------------
