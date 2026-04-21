@@ -18,6 +18,7 @@ class Vulnerability:
         confidence: Confidence score (0.0–1.0, NOT percent)
         severity: Severity level (CRITICAL, HIGH, MEDIUM, LOW)
         code_snippet: Code containing the vulnerability
+        status: Confidence status (CONFIRMED ≥95%, REVIEW_REQUIRED 65-95%)
 
     Evidence bundle fields (optional):
         cwe_id: CWE identifier (e.g., "CWE-89")
@@ -45,6 +46,7 @@ class Vulnerability:
     confidence: float  # 0.0–1.0, NOT percent
     severity: str      # CRITICAL, HIGH, MEDIUM, LOW
     code_snippet: str
+    status: str = "CONFIRMED"  # CONFIRMED (≥95%) or REVIEW_REQUIRED (65-95%)
     cwe_id: Optional[str] = None
     cwe_url: Optional[str] = None
     owasp_category: Optional[str] = None

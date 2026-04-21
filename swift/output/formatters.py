@@ -61,6 +61,7 @@ class JSONFormatter:
                     "vuln_type": v.vuln_type,
                     "description": v.description,
                     "confidence": v.confidence,
+                    "status": v.status,
                     "severity": v.severity,
                     "code_snippet": v.code_snippet,
                     # Evidence bundle fields (all 11)
@@ -162,6 +163,7 @@ class MarkdownFormatter:
                 # Display confidence as a percentage — more intuitive for humans.
                 confidence_pct = int(round(vuln.confidence * 100))
                 lines.append(f"- **Confidence:** {confidence_pct}%")
+                lines.append(f"- **Status:** {vuln.status}")
                 lines.append(f"- **Description:** {vuln.description}")
                 lines.append("")
                 lines.append("```python")

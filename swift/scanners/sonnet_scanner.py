@@ -83,10 +83,12 @@ If NO vulnerability, return:
 
 
 class SonnetAnalysisScanner:
-    """Deep analysis with 95% confidence gate using Claude Sonnet.
+    """Deep analysis with confidence tiers using Claude Sonnet.
 
-    The 95% rule: if confidence < 0.95, log warning and return None.
-    This prevents false positives from reaching the output.
+    Two-tier model:
+    - CONFIRMED: confidence ≥ 95% (high-confidence findings)
+    - REVIEW_REQUIRED: confidence 65-95% (useful for triage, not verified)
+    - Suppressed: confidence < 65% (not output)
 
     Args:
         client: Anthropic client instance.
@@ -94,7 +96,8 @@ class SonnetAnalysisScanner:
     """
 
     MODEL = "claude-sonnet-4-6"
-    CONFIDENCE_THRESHOLD = 0.95
+    HIGH_CONFIDENCE_THRESHOLD = 0.95
+    REVIEW_THRESHOLD = 0.65
     _counter: itertools.count = itertools.count(1)
 
     def __init__(self, client: Any, model: str = MODEL) -> None:
@@ -112,7 +115,7 @@ class SonnetAnalysisScanner:
             source_code: Full file source.
 
         Returns:
-            Vulnerability if confidence >= 0.95, else None.
+            Vulnerability with status CONFIRMED/REVIEW_REQUIRED if confidence >= 0.65, else None.
         """
         language = self._detect_language(file_path)
         prompt = _PROMPT_TEMPLATE.format(
@@ -169,12 +172,23 @@ class SonnetAnalysisScanner:
             logger.warning("Missing confidence field for %s:%d", file_path, line_number)
             return None
 
-        if confidence < self.CONFIDENCE_THRESHOLD:
+        # Two-tier confidence model
+        if confidence < self.REVIEW_THRESHOLD:
             logger.warning(
                 "Low confidence %.2f for %s:%d — suppressed (threshold=%.2f)",
-                confidence, file_path, line_number, self.CONFIDENCE_THRESHOLD,
+                confidence, file_path, line_number, self.REVIEW_THRESHOLD,
             )
             return None
+
+        # Determine status based on confidence tier
+        if confidence >= self.HIGH_CONFIDENCE_THRESHOLD:
+            status = "CONFIRMED"
+        else:
+            status = "REVIEW_REQUIRED"
+            logger.info(
+                "Medium confidence %.2f for %s:%d — marked REVIEW_REQUIRED",
+                confidence, file_path, line_number,
+            )
 
         vuln_id = f"SWIFT-{next(self._counter):03d}"
 
@@ -202,6 +216,7 @@ class SonnetAnalysisScanner:
             confidence=float(confidence),
             severity=data.get("severity", "medium").upper(),
             code_snippet=data.get("code_snippet", ""),
+            status=status,
             cwe_id=data.get("cwe_id"),
             cwe_url=data.get("cwe_url"),
             owasp_category=data.get("owasp_category"),

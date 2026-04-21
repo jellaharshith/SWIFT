@@ -102,15 +102,24 @@ class PatchGenerator:
     def generate_patch(self, vuln: Vulnerability) -> Optional[Patch]:
         """Generate the best patch for a single vulnerability.
 
-        Skips vulnerabilities with confidence < 0.90 — not enough signal to
-        produce a reliable fix.
+        SAFETY: Only generates patches for CONFIRMED findings (≥95% confidence).
+        REVIEW_REQUIRED findings (65-95%) are skipped to prevent patch generation
+        on unverified findings.
 
         Args:
             vuln: Confirmed vulnerability to patch.
 
         Returns:
-            Best Patch object, or None if confidence too low / generation fails.
+            Best Patch object, or None if not CONFIRMED / confidence too low / generation fails.
         """
+        # CRITICAL: Never auto-patch REVIEW_REQUIRED findings
+        if vuln.status == "REVIEW_REQUIRED":
+            logger.warning(
+                "Skipping patch for %s: status is REVIEW_REQUIRED (not verified)",
+                vuln.id,
+            )
+            return None
+
         if vuln.confidence < 0.90:
             logger.warning(
                 "Skipping patch for %s: confidence %.2f < 0.90",
