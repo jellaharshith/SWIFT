@@ -96,7 +96,11 @@ def scan_codebase(
                 source = fh.read()
 
             # Skip test files, minified files, and files too large for Haiku token limit
-            is_test_file = file_path.endswith((".spec.ts", ".spec.js", ".test.ts", ".test.js", ".spec.tsx", ".test.tsx"))
+            base_name = os.path.basename(file_path).lower()
+            is_test_file = (
+                file_path.endswith((".spec.ts", ".spec.js", ".test.ts", ".test.js", ".spec.tsx", ".test.tsx"))
+                or "spec" in base_name or "test" in base_name  # Catch userProfileSpec.ts, etc.
+            )
             is_minified = file_path.endswith((".min.js", ".min.css", ".min.ts"))
             file_size_kb = len(source) / 1024
             max_size_kb = 100  # ~50k tokens, safe margin from 200k limit
