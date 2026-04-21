@@ -12,11 +12,13 @@ from agent.models import Patch, ScanResult, Vulnerability
 from chains.detector import ExploitChainDetector
 from config.settings import get_config
 from log.logger import MetricsCollector, get_logger
+from output.chains import ChainsFormatter
 from patches.generator import PatchGenerator
 from sandbox.docker_runner import DockerSandbox
 from scanners.haiku_scanner import HaikuTriageScanner
 from scanners.sonnet_scanner import SonnetAnalysisScanner
 from triage.patterns import triage_codebase
+from triage.ranking import RiskScorer
 
 logger = get_logger()
 
@@ -88,6 +90,19 @@ def scan_codebase(
 
     logger.info("Sonnet stage: %d vulnerabilities confirmed (≥95%% confidence)", len(vulnerabilities))
 
+    # --- Phase 3.2: Risk scoring and ranking ---
+    scorer = RiskScorer()
+    for vuln in vulnerabilities:
+        # Infer exploitability if not already set
+        if vuln.exploitability is None:
+            vuln.exploitability = scorer.get_exploitability_score(vuln)
+        # Infer business impact category if not already set
+        if vuln.business_impact_category is None:
+            vuln.business_impact_category = scorer.get_impact_category(vuln)
+        # Calculate risk score
+        vuln.risk_score = scorer.calculate_risk_score(vuln)
+    logger.info("Risk scoring: %d vulnerabilities ranked", len(vulnerabilities))
+
     # --- Phase 3.5: Exploit chain detection (best-effort) ---
     exploit_chains = []
     if vulnerabilities:
@@ -112,9 +127,15 @@ def scan_codebase(
     if generate_patches_flag and vulnerabilities:
         result = generate_patches(result)
 
+    # Export chains to standalone JSON if chains exist
+    if result.exploit_chains:
+        chains_export = export_chains_standalone(result)
+        logger.debug("Chains standalone export: %d bytes", len(chains_export))
+
     logger.info(
-        "Scan %s complete: %d vulns, %d patches, %.1fs",
-        scan_id, len(result.vulnerabilities), len(result.patches), result.duration_seconds,
+        "Scan %s complete: %d vulns, %d patches, %d chains, %.1fs",
+        scan_id, len(result.vulnerabilities), len(result.patches),
+        len(result.exploit_chains), result.duration_seconds,
     )
     return result
 
@@ -159,3 +180,21 @@ def generate_patches(scan_result: ScanResult) -> ScanResult:
         timestamp=scan_result.timestamp,
         exploit_chains=scan_result.exploit_chains,
     )
+
+
+def export_chains_standalone(scan_result: ScanResult) -> str:
+    """Export exploit chains to standalone JSON format with attack step details.
+
+    Args:
+        scan_result: Completed scan with exploit chains.
+
+    Returns:
+        JSON string containing standalone chains export.
+    """
+    formatter = ChainsFormatter()
+    chains_json = formatter.format(scan_result)
+    logger.info(
+        "Chains exported: %d chains with attack steps",
+        len(scan_result.exploit_chains),
+    )
+    return chains_json
