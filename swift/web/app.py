@@ -223,7 +223,21 @@ def _run_scan(job_id: str, repo: str, patches: bool) -> None:
         else:
             repo_path = repo
 
-        result = scan_codebase(repo_path, generate_patches_flag=patches)
+        def progress_callback(payload: dict) -> None:
+            """Update scan status with real-time progress from orchestrator."""
+            _scan_status[job_id].update({
+                "stage": payload.get("stage", 0),
+                "stage_name": payload.get("stage_name", ""),
+                "files_total": payload.get("files_total", 0),
+                "files_scanned": payload.get("files_scanned", 0),
+                "current_file": payload.get("current_file", ""),
+            })
+
+        result = scan_codebase(
+            repo_path,
+            generate_patches_flag=patches,
+            progress_callback=progress_callback,
+        )
         save_scan(db, result)
         _scan_status[job_id] = {
             "status": "done",

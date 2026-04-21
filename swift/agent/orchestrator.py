@@ -1,10 +1,11 @@
 """Agent orchestrator — full SWIFT pipeline: triage → haiku → sonnet → patch → sandbox."""
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import List
+from typing import Callable, List, Optional
 
 import anthropic
 
@@ -26,6 +27,7 @@ logger = get_logger()
 def scan_codebase(
     repo_path: str,
     generate_patches_flag: bool = False,
+    progress_callback: Optional[Callable[[dict], None]] = None,
 ) -> ScanResult:
     """Run the full SWIFT scan pipeline on a local repository.
 
@@ -38,6 +40,8 @@ def scan_codebase(
     Args:
         repo_path: Path to the repository root to scan.
         generate_patches_flag: If True, generate and sandbox-test patches after scan.
+        progress_callback: Optional callback function to report progress. Called with dict of
+            {stage, stage_name, files_total, files_scanned, current_file}.
 
     Returns:
         ScanResult with confirmed vulnerabilities and optional patches.
@@ -57,14 +61,36 @@ def scan_codebase(
     logger.info("Scan %s started on %s", scan_id, repo_path)
     start = time.monotonic()
 
+    # Progress callback helper — safe even if callback is None or raises
+    def _emit(payload: dict) -> None:
+        if progress_callback:
+            try:
+                progress_callback(payload)
+            except Exception:
+                pass
+
     # --- Phase 1: Regex triage (zero cost) ---
     flagged_map = triage_codebase(repo_path)
     files_scanned = len(flagged_map)
     logger.info("Regex triage: %d files flagged", files_scanned)
+    _emit({
+        "stage": 0,
+        "stage_name": "triage_complete",
+        "files_total": files_scanned,
+        "files_scanned": files_scanned,
+        "current_file": "",
+    })
 
     # --- Phase 2: Haiku fast scan ---
     haiku_results: dict[str, tuple[str, list[int]]] = {}
-    for file_path, line_numbers in flagged_map.items():
+    for idx, (file_path, line_numbers) in enumerate(flagged_map.items()):
+        _emit({
+            "stage": 1,
+            "stage_name": "haiku",
+            "files_total": files_scanned,
+            "files_scanned": idx,
+            "current_file": os.path.basename(file_path),
+        })
         try:
             with open(file_path, encoding="utf-8", errors="replace") as fh:
                 source = fh.read()
@@ -75,10 +101,24 @@ def scan_codebase(
             logger.error("Haiku scan error %s: %s", file_path, exc)
 
     logger.info("Haiku stage: %d files with suspicious lines", len(haiku_results))
+    _emit({
+        "stage": 2,
+        "stage_name": "sonnet",
+        "files_total": len(haiku_results),
+        "files_scanned": 0,
+        "current_file": "",
+    })
 
     # --- Phase 3: Sonnet deep analysis (95% gate) ---
     vulnerabilities: List[Vulnerability] = []
-    for file_path, (source, line_numbers) in haiku_results.items():
+    for f_idx, (file_path, (source, line_numbers)) in enumerate(haiku_results.items()):
+        _emit({
+            "stage": 2,
+            "stage_name": "sonnet",
+            "files_total": len(haiku_results),
+            "files_scanned": f_idx,
+            "current_file": os.path.basename(file_path),
+        })
         for line_num in line_numbers:
             try:
                 vuln = sonnet.analyze_line(file_path, line_num, source)
@@ -125,6 +165,13 @@ def scan_codebase(
 
     # --- Phase 4: Patch generation (optional) ---
     if generate_patches_flag and vulnerabilities:
+        _emit({
+            "stage": 3,
+            "stage_name": "patches",
+            "files_total": len(vulnerabilities),
+            "files_scanned": 0,
+            "current_file": "",
+        })
         result = generate_patches(result)
 
     # Export chains to standalone JSON if chains exist
