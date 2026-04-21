@@ -3,12 +3,17 @@ from __future__ import annotations
 
 import itertools
 import json
+import time
 from typing import Any, List, Optional
 
 from agent.models import AttackStep, ExploitChain, Vulnerability
 from log.logger import get_logger
+from utils.json_safe import safe_parse_json_array
 
 logger = get_logger()
+
+# Timeout protection: skip chain detection if exceeds this duration (seconds)
+MAX_CHAIN_DETECTION_TIME = 30
 
 _PROMPT_TEMPLATE = """\
 You are an expert security architect specializing in attack path analysis.
@@ -82,16 +87,22 @@ class ExploitChainDetector:
     ) -> List[ExploitChain]:
         """Detect exploit chains from a list of vulnerabilities.
 
+        Best-effort chain detection with timeout and error resilience.
+        Returns empty list on timeout or any error (partial results still propagate).
+
         Args:
             vulnerabilities: List of confirmed Vulnerability objects.
 
         Returns:
             List of ExploitChain objects with confidence >= 0.85.
-            Empty list if < 2 vulnerabilities (no chains possible) or on error.
+            Empty list if < 2 vulnerabilities, timeout, parse error, or API error.
         """
         if len(vulnerabilities) < 2:
             logger.debug("Too few vulnerabilities for chains (%d < 2)", len(vulnerabilities))
             return []
+
+        # Start timeout clock
+        start_time = time.monotonic()
 
         try:
             vulns_json = json.dumps(
@@ -115,12 +126,31 @@ class ExploitChainDetector:
         prompt = _PROMPT_TEMPLATE.format(vulns_json=vulns_json)
 
         try:
+            # Check timeout before API call
+            elapsed = time.monotonic() - start_time
+            if elapsed > MAX_CHAIN_DETECTION_TIME:
+                logger.warning("Chain detection skipped (prep timeout: %.1fs)", elapsed)
+                return []
+
             raw = self._call_api(prompt)
+
+            # Check timeout after API call
+            elapsed = time.monotonic() - start_time
+            if elapsed > MAX_CHAIN_DETECTION_TIME:
+                logger.warning("Chain detection skipped (API timeout: %.1fs)", elapsed)
+                return []
+
+            # Handle empty response
+            if not raw or not raw.strip():
+                logger.warning("Chain detection returned empty response")
+                return []
+
             chains = self._parse_response(raw)
-            logger.info("Detected %d exploit chains", len(chains))
+            logger.info("Detected %d exploit chains (%.1fs)", len(chains), elapsed)
             return chains
         except Exception as e:
-            logger.warning("Chain detection failed (proceeding without chains): %s", e)
+            elapsed = time.monotonic() - start_time
+            logger.warning("Chain detection failed after %.1fs (proceeding without chains): %s", elapsed, e)
             return []
 
     def _call_api(self, prompt: str) -> str:
@@ -140,20 +170,22 @@ class ExploitChainDetector:
         return response.content[0].text
 
     def _parse_response(self, raw: str) -> List[ExploitChain]:
-        """Parse chain detection response.
+        """Parse chain detection response using safe JSON parsing.
+
+        Handles malformed JSON gracefully by returning empty list instead of raising.
+        Confidence gate: only includes chains with confidence >= 0.85.
 
         Args:
             raw: Raw response text from API.
 
         Returns:
             List of ExploitChain objects (confidence >= 0.85).
-
-        Raises:
-            json.JSONDecodeError: If response is not valid JSON.
+            Empty list if JSON parse fails.
         """
-        data = json.loads(raw)
-        if not isinstance(data, list):
-            logger.warning("Chain response is not a list, returning empty")
+        # Use safe parsing to handle invalid JSON without crashing
+        data = safe_parse_json_array(raw)
+        if not data:
+            logger.warning("Chain response is not valid JSON array, returning empty")
             return []
 
         chains = []
