@@ -1,12 +1,15 @@
 """Regex triage pre-filter — zero API calls, runs before Haiku."""
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Dict, List, Set
 
+logger = logging.getLogger(__name__)
+
 # Supported source file extensions.
-_SUPPORTED_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx"}
+_SUPPORTED_EXTENSIONS = {".py", ".ts", ".tsx", ".js", ".jsx", ".c", ".cpp", ".cc", ".h"}
 
 # Skip these heavy/generated directories to avoid false positives and wasted cycles.
 _SKIP_DIRS = {"node_modules", "__pycache__", ".git", "dist", "build", ".next", "coverage"}
@@ -137,16 +140,20 @@ def triage_file(file_path: str) -> Set[int]:
 def triage_codebase(repo_path: str) -> Dict[str, List[int]]:
     """Walk repo_path, triage every supported source file (skip hidden/generated dirs).
 
-    Supported extensions: .py, .ts, .tsx, .js, .jsx
+    Supported extensions: .py, .ts, .tsx, .js, .jsx, .c, .cpp, .cc, .h
+
+    Includes ALL supported files in results, even if no patterns match.
+    Files with zero flagged lines are included with empty list (MVP requirement).
 
     Args:
         repo_path: Root directory to scan.
 
     Returns:
-        Dict mapping file_path → sorted list of flagged line numbers.
-        Files with zero flags are omitted.
+        Dict mapping file_path → sorted list of flagged line numbers (may be empty).
     """
     results: Dict[str, List[int]] = {}
+    files_discovered = 0
+
     for dirpath, dirnames, filenames in os.walk(repo_path):
         # Prune irrelevant/generated directories in-place.
         dirnames[:] = [
@@ -158,9 +165,13 @@ def triage_codebase(repo_path: str) -> Dict[str, List[int]]:
             if ext not in _SUPPORTED_EXTENSIONS:
                 continue
             full_path = os.path.join(dirpath, fname)
+            logger.debug("[TRIAGE] Scanning file: %s", full_path)
             flagged = triage_file(full_path)
-            if flagged:
-                results[full_path] = sorted(flagged)
+            # Include ALL supported files, even if flagged is empty (MVP requirement)
+            results[full_path] = sorted(flagged)
+            files_discovered += 1
+
+    logger.info("[TRIAGE] Total files discovered: %d", files_discovered)
     return results
 
 

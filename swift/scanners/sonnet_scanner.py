@@ -11,6 +11,29 @@ from log.logger import get_logger
 
 logger = get_logger()
 
+
+def _clean_json(json_str: str) -> str:
+    """Clean malformed JSON: remove trailing commas, fix syntax errors.
+
+    Handles:
+    - Trailing commas before } or ]
+    - Extra whitespace
+    - Common Sonnet mistakes
+
+    Args:
+        json_str: Raw JSON string that may be malformed.
+
+    Returns:
+        Cleaned JSON string with common syntax errors fixed.
+    """
+    # Remove trailing commas before } or ]
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+    # Remove any leading/trailing whitespace
+    json_str = json_str.strip()
+
+    return json_str
+
 _PROMPT_TEMPLATE = """\
 You are an expert security analyst. Analyze the following {language} code for security vulnerabilities.
 
@@ -160,11 +183,26 @@ class SonnetAnalysisScanner:
     ) -> Optional[Vulnerability]:
         # Try to extract JSON from markdown code blocks (e.g., ```json {...}```)
         json_str = self._extract_json(raw)
+
+        # Log raw for debugging
+        raw_preview = raw[:200].replace('\n', ' ')
+        logger.debug("Sonnet raw response (first 200 chars): %s", raw_preview)
+
+        # Attempt to clean JSON
+        cleaned_json = _clean_json(json_str)
+
+        # Log cleaned for debugging
+        cleaned_preview = cleaned_json[:200].replace('\n', ' ')
+        logger.debug("Sonnet cleaned JSON (first 200 chars): %s", cleaned_preview)
+
+        # Try to parse
         try:
-            data = json.loads(json_str)
+            data = json.loads(cleaned_json)
         except json.JSONDecodeError as e:
-            logger.debug("Sonnet JSON parse error %s:%d: %s (response: %.100s)", file_path, line_number, str(e), raw)
-            logger.warning("Sonnet returned invalid JSON for %s:%d", file_path, line_number)
+            logger.warning(
+                "Sonnet JSON parse failed for %s:%d after cleaning: %s",
+                file_path, line_number, str(e)
+            )
             return None
 
         confidence = data.get("confidence")

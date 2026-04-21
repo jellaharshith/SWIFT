@@ -1227,7 +1227,7 @@
       <h1 class="input-title">Find <span>vulnerabilities</span><br>before attackers do.</h1>
       <p class="input-desc">
         Paste a GitHub repo URL. SWIFT runs a 3-stage AI pipeline — regex triage, Haiku fast-scan,
-        Sonnet deep analysis — reporting only findings with ≥95% confidence.
+        Finds risky patterns, suggests fixes, verifies in sandbox.
       </p>
 
       <div class="input-group">
@@ -1283,15 +1283,15 @@
         <div class="stage-row pending" data-stage="2">
           <div class="stage-icon"></div>
           <div class="stage-info">
-            <div class="stage-name">Sonnet Deep Scan</div>
-            <div class="stage-desc">95% confidence gate — high-precision reasoning</div>
+            <div class="stage-name">Signal Verification</div>
+            <div class="stage-desc">Signal verification and sandbox testing</div>
           </div>
         </div>
         <div class="stage-row pending" id="stage-patch" data-stage="3" style="display:none">
           <div class="stage-icon"></div>
           <div class="stage-info">
             <div class="stage-name">Patch Generation</div>
-            <div class="stage-desc">AI-generated remediation code, sandbox-tested</div>
+            <div class="stage-desc">Suggested fixes and sandbox behavioral verification</div>
           </div>
         </div>
       </div>
@@ -1336,7 +1336,7 @@
           <div class="mc-value" id="mc-files">—</div>
         </div>
         <div class="metric-card">
-          <div class="mc-label">Vulnerabilities</div>
+          <div class="mc-label">Signals</div>
           <div class="mc-value" id="mc-vulns">—</div>
         </div>
         <div class="metric-card" id="mc-patches-card">
@@ -1367,7 +1367,7 @@
       <!-- Vulnerability list -->
       <div id="vuln-section">
         <div class="section-header">
-          <span class="section-title">Vulnerabilities</span>
+          <span class="section-title">Signals</span>
           <span class="count-badge" id="vuln-count-badge">0</span>
         </div>
         <div id="vuln-list"></div>
@@ -1468,10 +1468,10 @@
     '[HAIKU] Filtering false positives...',
     '[HAIKU] Pattern confidence: 80%+ threshold passed...',
     '[SONNET] Deep analysis initiated on high-risk locations...',
-    '[SONNET] Applying 95% confidence gate...',
+    '[SANDBOX] Verifying patch behavior...',
     '[SONNET] Cross-referencing CWE patterns...',
     '[SONNET] Validating exploit conditions...',
-    '[SONNET] Finalizing vulnerability report...',
+    '[SANDBOX] Finalizing verification...',
     '[PATCH] Generating candidate fixes (3 per vuln)...',
     '[PATCH] Scoring patch candidates...',
     '[PATCH] Running sandbox validation...',
@@ -1706,7 +1706,7 @@
     panel.innerHTML = `
       <div class="summary-panel">
         <div class="summary-headline ${hClass}">
-          ${vulns.length === 0 ? '0 Vulnerabilities Found'
+          ${vulns.length === 0 ? '0 Signals Found'
             : `${vulns.length} Vulnerabilit${vulns.length===1?'y':'ies'} Found`}
         </div>
         <div class="summary-sev-boxes">${sevBoxes || '<span style="color:var(--low);font-family:var(--mono);font-size:0.8rem;">All clear — no findings.</span>'}</div>
@@ -1821,7 +1821,7 @@
   function renderVulnList(vulns, patches) {
     const container = document.getElementById('vuln-list');
     if (!vulns.length) {
-      container.innerHTML = '<div class="vuln-empty">✓ No vulnerabilities detected (≥95% confidence threshold)</div>';
+      container.innerHTML = '<div class="vuln-empty">✓ No signals detected — code is clean or needs deeper review</div>';
       return;
     }
 

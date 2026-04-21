@@ -115,35 +115,67 @@ def scan_codebase(
         except Exception as exc:
             logger.error("Haiku scan error %s: %s", file_path, exc)
 
-    logger.info("Haiku stage: %d files with suspicious lines", len(haiku_results))
+    logger.info("Haiku phase: %d files scanned", len(haiku_results))
     _emit({
         "stage": 2,
-        "stage_name": "sonnet",
+        "stage_name": "review_required",
         "files_total": len(haiku_results),
         "files_scanned": 0,
         "current_file": "",
     })
 
-    # --- Phase 3: Sonnet deep analysis (95% gate) ---
+    # --- Phase 3: Convert Haiku signals to REVIEW_REQUIRED findings (MVP mode) ---
+    # Disabled Sonnet deep analysis for MVP stability. All findings are Haiku detections
+    # marked REVIEW_REQUIRED with confidence ~0.7 for manual verification.
     vulnerabilities: List[Vulnerability] = []
+    signal_counter = 0
+
     for f_idx, (file_path, (source, line_numbers)) in enumerate(haiku_results.items()):
         _emit({
             "stage": 2,
-            "stage_name": "sonnet",
+            "stage_name": "review_required",
             "files_total": len(haiku_results),
             "files_scanned": f_idx,
             "current_file": os.path.basename(file_path),
         })
         for line_num in line_numbers:
             try:
-                vuln = sonnet.analyze_line(file_path, line_num, source)
-                if vuln:
-                    vulnerabilities.append(vuln)
-                    metrics.record_vulnerability(vuln.id)
-            except Exception as exc:
-                logger.error("Sonnet error %s:%d: %s", file_path, line_num, exc)
+                # Get the line content from source
+                lines = source.split('\n')
+                code_snippet = ""
+                if line_num > 0 and line_num <= len(lines):
+                    code_snippet = lines[line_num - 1]
 
-    logger.info("Sonnet stage: %d vulnerabilities confirmed (≥95%% confidence)", len(vulnerabilities))
+                # Create REVIEW_REQUIRED finding from Haiku signal
+                vuln = Vulnerability(
+                    id=f"SIGNAL-{uuid.uuid4().hex[:8]}",
+                    file_path=file_path,
+                    line_number=line_num,
+                    vuln_type="signal_requires_review",
+                    description=f"Haiku pattern match detected on line {line_num} — requires manual verification",
+                    confidence=0.7,
+                    severity="medium",
+                    code_snippet=code_snippet,
+                    status="REVIEW_REQUIRED",
+                    cwe_id=None,
+                    cwe_url=None,
+                    owasp_category=None,
+                    exploit_description=None,
+                    exploit_impact=None,
+                    remediation=None,
+                    remediation_code=None,
+                    remediation_effort=None,
+                    remediation_time_minutes=None,
+                    references=[],
+                )
+                vulnerabilities.append(vuln)
+                signal_counter += 1
+                metrics.record_vulnerability(vuln.id)
+            except Exception as exc:
+                logger.error("Signal conversion error %s:%d: %s", file_path, line_num, exc)
+
+    logger.info("Signals generated: %d REVIEW_REQUIRED findings", signal_counter)
+    logger.debug("Files discovered: %d, files passed to Haiku: %d", files_scanned, len(haiku_results))
 
     # --- Phase 3.2: Risk scoring and ranking ---
     scorer = RiskScorer()
