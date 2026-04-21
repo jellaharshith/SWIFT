@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import config.settings as _settings
-from agent.models import Patch, ScanResult, TestResult, Vulnerability
+from agent.models import AttackStep, ExploitChain, Patch, ScanResult, TestResult, Vulnerability
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +103,53 @@ def empty_scan_result() -> ScanResult:
         duration_seconds=0.1,
         total_cost_usd=0.0,
         timestamp="2026-04-19T10:00:00+00:00",
+    )
+
+
+@pytest.fixture()
+def sample_exploit_chain() -> ExploitChain:
+    return ExploitChain(
+        chain_id="CHAIN-001",
+        name="SQL Injection → Auth Bypass → Admin Access",
+        vulnerability_ids=["SWIFT-001", "SWIFT-003"],
+        attack_path="1. Exploit SQL injection in login query\n2. Bypass authentication\n3. Gain admin access",
+        entry_point="auth/views.py:42",
+        impact="Complete system compromise",
+        severity="CRITICAL",
+        confidence=0.91,
+        attack_steps=[
+            AttackStep(
+                step=1,
+                description="Exploit SQL injection in login query",
+                vuln_id="SWIFT-001",
+                entry_point="auth/views.py:42",
+            ),
+            AttackStep(
+                step=2,
+                description="Bypass authentication and access admin panel",
+                vuln_id="SWIFT-003",
+                entry_point="admin/views.py:15",
+            ),
+        ],
+    )
+
+
+@pytest.fixture()
+def sample_scan_result_with_chains(
+    sample_vulnerability: Vulnerability,
+    sample_patch: Patch,
+    sample_exploit_chain: ExploitChain,
+) -> ScanResult:
+    return ScanResult(
+        scan_id="scan-abc12345",
+        repo_path="/tmp/test-repo",
+        files_scanned=3,
+        vulnerabilities=[sample_vulnerability],
+        patches=[sample_patch],
+        duration_seconds=1.5,
+        total_cost_usd=0.12,
+        timestamp="2026-04-19T10:00:00+00:00",
+        exploit_chains=[sample_exploit_chain],
     )
 
 

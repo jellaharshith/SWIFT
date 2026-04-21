@@ -63,6 +63,22 @@ class JSONFormatter:
                     "confidence": v.confidence,
                     "severity": v.severity,
                     "code_snippet": v.code_snippet,
+                    # Evidence bundle fields (all 11)
+                    "cwe_id": v.cwe_id,
+                    "cwe_url": v.cwe_url,
+                    "owasp_category": v.owasp_category,
+                    "exploit_description": v.exploit_description,
+                    "exploit_impact": v.exploit_impact,
+                    "remediation": v.remediation,
+                    "remediation_code": v.remediation_code,
+                    "remediation_effort": v.remediation_effort,
+                    "remediation_time_minutes": v.remediation_time_minutes,
+                    "affected_code": v.affected_code,
+                    "references": v.references,
+                    # Phase 3 risk scoring fields
+                    "risk_score": v.risk_score,
+                    "exploitability": v.exploitability,
+                    "business_impact_category": v.business_impact_category,
                 }
                 for v in result.vulnerabilities
             ],
@@ -152,6 +168,39 @@ class MarkdownFormatter:
                 lines.append(vuln.code_snippet)
                 lines.append("```")
                 lines.append("")
+
+                # --- Phase 3 risk scoring fields ---
+                # Only show section if at least one Phase 3 field is present
+                if vuln.risk_score is not None or vuln.exploitability is not None or vuln.business_impact_category is not None:
+                    lines.append("**Phase 3 Risk Assessment:**")
+                    lines.append("")
+                    if vuln.risk_score is not None:
+                        risk_score_int = int(round(vuln.risk_score))
+                        lines.append(f"- **Risk Score:** {risk_score_int}/100")
+                    else:
+                        lines.append("- **Risk Score:** -")
+
+                    if vuln.exploitability is not None:
+                        # Map exploitability float (0.0-1.0) to readable string
+                        # trivial ≈ 0.9+, moderate ≈ 0.5-0.9, complex ≈ 0.2-0.5, specific ≈ <0.2
+                        if vuln.exploitability >= 0.85:
+                            exploit_label = "trivial"
+                        elif vuln.exploitability >= 0.55:
+                            exploit_label = "moderate"
+                        elif vuln.exploitability >= 0.25:
+                            exploit_label = "complex"
+                        else:
+                            exploit_label = "specific"
+                        lines.append(f"- **Exploitability:** {exploit_label}")
+                    else:
+                        lines.append("- **Exploitability:** -")
+
+                    if vuln.business_impact_category is not None:
+                        lines.append(f"- **Business Impact:** {vuln.business_impact_category}")
+                    else:
+                        lines.append("- **Business Impact:** -")
+
+                    lines.append("")
 
         else:
             lines.append("*No vulnerabilities found.*")

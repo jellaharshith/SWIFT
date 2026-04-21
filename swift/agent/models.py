@@ -31,6 +31,11 @@ class Vulnerability:
         remediation_time_minutes: Estimated time to fix in minutes
         affected_code: Dict with "before" and "after" code snippets
         references: List of URLs to security documentation
+
+    Risk scoring fields (Phase 3, optional):
+        exploitability: How easy to exploit (0.0-1.0), trivial=0.9, complex=0.2
+        business_impact_category: Real-world impact category (customer_data_breach, etc.)
+        risk_score: Calculated risk score (0-100), higher = riskier
     """
     id: str
     file_path: str
@@ -51,6 +56,9 @@ class Vulnerability:
     remediation_time_minutes: Optional[int] = None
     affected_code: Optional[Dict[str, str]] = None
     references: List[str] = field(default_factory=list)
+    exploitability: Optional[float] = None  # 0.0-1.0, inferred if not set
+    business_impact_category: Optional[str] = None  # e.g., customer_data_breach
+    risk_score: Optional[float] = None  # 0-100, calculated by RiskScorer
 
 
 @dataclass
@@ -69,6 +77,22 @@ class Patch:
 
 
 @dataclass
+class AttackStep:
+    """Single step in an exploit chain attack sequence.
+
+    Attributes:
+        step: Step number in the chain (1-indexed).
+        description: Human-readable description of this attack step.
+        vuln_id: Vulnerability ID involved in this step (e.g., "SWIFT-001").
+        entry_point: Location where this step occurs (e.g., "auth/views.py:42").
+    """
+    step: int
+    description: str
+    vuln_id: str
+    entry_point: str
+
+
+@dataclass
 class ExploitChain:
     chain_id: str
     name: str
@@ -78,6 +102,7 @@ class ExploitChain:
     impact: str
     severity: str
     confidence: float
+    attack_steps: List[AttackStep] = field(default_factory=list)
 
 
 @dataclass
