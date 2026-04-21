@@ -34,11 +34,14 @@ def test_sonnet_returns_vulnerability_at_95():
     assert result.confidence == 0.97
 
 
-def test_sonnet_returns_none_at_94():
+def test_sonnet_returns_review_required_at_94():
+    # Confidence 0.94 is in the medium tier (0.65–0.95): returns REVIEW_REQUIRED, not None.
     client = _make_client(VULN_94)
     scanner = SonnetAnalysisScanner(client=client)
     result = scanner.analyze_line("app.py", 10, "source code")
-    assert result is None
+    assert isinstance(result, Vulnerability)
+    assert result.status == "REVIEW_REQUIRED"
+    assert result.confidence == 0.94
 
 
 def test_sonnet_returns_none_at_0():
@@ -48,8 +51,29 @@ def test_sonnet_returns_none_at_0():
     assert result is None
 
 
-def test_sonnet_low_confidence_is_logged():
+def test_sonnet_medium_confidence_is_logged():
+    # Medium confidence (0.94) logs at INFO level, not WARNING.
+    # WARNING is reserved for truly low confidence (< REVIEW_THRESHOLD = 0.65).
     client = _make_client(VULN_94)
+    scanner = SonnetAnalysisScanner(client=client)
+    with patch("scanners.sonnet_scanner.logger") as mock_log:
+        scanner.analyze_line("app.py", 10, "source code")
+        mock_log.info.assert_called()
+
+
+def test_sonnet_returns_none_below_review_threshold():
+    # Confidence below 0.65 (REVIEW_THRESHOLD) is suppressed entirely.
+    vuln_low = {**VULN_97, "confidence": 0.5}
+    client = _make_client(vuln_low)
+    scanner = SonnetAnalysisScanner(client=client)
+    result = scanner.analyze_line("app.py", 10, "source code")
+    assert result is None
+
+
+def test_sonnet_low_confidence_warning_is_logged():
+    # Confidence below REVIEW_THRESHOLD (0.65) must emit a WARNING.
+    vuln_low = {**VULN_97, "confidence": 0.5}
+    client = _make_client(vuln_low)
     scanner = SonnetAnalysisScanner(client=client)
     with patch("scanners.sonnet_scanner.logger") as mock_log:
         scanner.analyze_line("app.py", 10, "source code")
@@ -312,9 +336,13 @@ def test_sonnet_handles_null_references():
 
 
 def test_sonnet_confidence_gate_still_enforced():
-    """Test that the 95% confidence gate is still enforced with evidence fields."""
+    """Test the three-tier confidence model with all evidence fields populated.
+
+    0.94 is medium confidence (REVIEW_REQUIRED), not suppressed.
+    Only confidence < REVIEW_THRESHOLD (0.65) returns None.
+    """
     client = _make_client({
-        "confidence": 0.94,  # Below threshold
+        "confidence": 0.94,  # Medium tier: 0.65 ≤ 0.94 < 0.95
         "vuln_type": "sql_injection",
         "description": "SQL injection",
         "severity": "critical",
@@ -328,4 +356,6 @@ def test_sonnet_confidence_gate_still_enforced():
     scanner = SonnetAnalysisScanner(client=client)
     result = scanner.analyze_line("app.py", 5, "source")
 
-    assert result is None  # Should be suppressed due to low confidence
+    assert result is not None
+    assert result.status == "REVIEW_REQUIRED"
+    assert result.confidence == 0.94
