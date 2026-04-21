@@ -1,6 +1,7 @@
 """SWIFT FastAPI web application."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -9,7 +10,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
@@ -210,30 +211,34 @@ def download_markdown_report(scan_id: str, db: Session = Depends(get_db)):
     )
 
 
-def _run_scan(job_id: str, repo: str, patches: bool) -> None:
-    """Background task: run scan, save to DB, persist status."""
+def _run_scan_sync(job_id: str, repo: str, patches: bool) -> None:
+    """Synchronous scan execution — runs in a thread-pool executor."""
     from agent.github_cloner import clone_repo, is_github_url
 
     cleanup = None
     db = SessionLocal()
     try:
-
         if is_github_url(repo):
             repo_path, cleanup = clone_repo(repo)
         else:
             repo_path = repo
 
         def progress_callback(payload: dict) -> None:
-            """Update scan job progress in database."""
-            update_scan_job(
-                db,
-                job_id,
-                stage=payload.get("stage", 0),
-                stage_name=payload.get("stage_name", ""),
-                files_total=payload.get("files_total", 0),
-                files_scanned=payload.get("files_scanned", 0),
-                current_file=payload.get("current_file", ""),
-            )
+            """Persist all progress fields to DB on each emit."""
+            kwargs: dict = {
+                "stage": payload.get("stage", 0),
+                "stage_name": payload.get("stage_name", ""),
+                "files_total": payload.get("files_total", 0),
+                "files_scanned": payload.get("files_scanned", 0),
+                "current_file": payload.get("current_file", ""),
+                "progress": payload.get("progress", 0),
+                "signals_detected": payload.get("signals_detected", 0),
+                "batch_current": payload.get("batch_current", 0),
+                "batch_total": payload.get("batch_total", 0),
+            }
+            if payload.get("findings_json") is not None:
+                kwargs["findings_json"] = payload["findings_json"]
+            update_scan_job(db, job_id, **kwargs)
 
         result = scan_codebase(
             repo_path,
@@ -245,7 +250,8 @@ def _run_scan(job_id: str, repo: str, patches: bool) -> None:
             db,
             job_id,
             status="done",
-            detail=result.scan_id,  # Store scan_id for lookup
+            progress=100,
+            detail=result.scan_id,
         )
     except Exception as exc:
         update_scan_job(db, job_id, status="error", detail=str(exc))
@@ -255,12 +261,23 @@ def _run_scan(job_id: str, repo: str, patches: bool) -> None:
         db.close()
 
 
+async def _run_scan_async(job_id: str, repo: str, patches: bool) -> None:
+    """Async wrapper: marks job running then delegates to thread executor."""
+    db = SessionLocal()
+    try:
+        update_scan_job(db, job_id, status="running")
+    finally:
+        db.close()
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _run_scan_sync, job_id, repo, patches)
+
+
 @app.post("/scan")
-def trigger_scan(body: ScanRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def trigger_scan(body: ScanRequest, db: Session = Depends(get_db)):
     job_id = str(uuid.uuid4())
-    create_scan_job(db, job_id)  # Create job immediately (don't wait for background task)
-    background_tasks.add_task(_run_scan, job_id, body.repo, body.patches)
-    return {"scan_id": job_id, "status": "running"}
+    create_scan_job(db, job_id)  # status="queued", started_at=now
+    asyncio.create_task(_run_scan_async(job_id, body.repo, body.patches))
+    return {"job_id": job_id, "scan_id": job_id, "status": "queued"}
 
 
 @app.get("/scan/{scan_id}/status")
@@ -270,11 +287,17 @@ def get_scan_status(scan_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Job {scan_id} not found.")
     return {
         "status": job.status,
+        "progress": job.progress or 0,
         "stage": job.stage,
         "stage_name": job.stage_name,
         "files_total": job.files_total,
         "files_scanned": job.files_scanned,
+        "batch_current": job.batch_current or 0,
+        "batch_total": job.batch_total or 0,
+        "signals_detected": job.signals_detected or 0,
         "current_file": job.current_file,
+        "findings": json.loads(job.findings_json) if job.findings_json else [],
+        "started_at": job.started_at,
         "detail": job.detail,
         "scan_id": job.detail if job.status == "done" else None,
     }

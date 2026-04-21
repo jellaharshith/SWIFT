@@ -1489,36 +1489,71 @@
     });
   }
 
+  function appendScanLog(msg) {
+    const log = document.getElementById('scan-log');
+    if (!log) return;
+    const ts = new Date().toISOString().substr(11, 8);
+    log.textContent += `${ts}  ${msg}\n`;
+    log.scrollTop = log.scrollHeight;
+  }
+
   function applyProgressUpdate(status) {
     const stage = status.stage ?? 0;
     const filesTotal = status.files_total ?? 0;
     const filesScanned = status.files_scanned ?? 0;
     const currentFile = status.current_file ?? '';
+    const serverProgress = status.progress ?? 0;
+    const signalsDetected = status.signals_detected ?? 0;
+    const batchCurrent = status.batch_current ?? 0;
+    const batchTotal = status.batch_total ?? 0;
 
     activateStage(stage);
 
     const fill = document.getElementById('progress-fill');
     const label = document.getElementById('progress-label');
-    if (fill && filesTotal > 0) {
-      const pct = Math.round((filesScanned / filesTotal) * 100);
-      fill.style.width = pct + '%';
-      if (label) label.textContent = `${filesScanned} / ${filesTotal} files`;
-    } else if (fill && parseFloat(fill.style.width) < 5) {
-      fill.style.width = '5%';
+
+    // Prefer server-computed progress %; fall back to file-ratio estimate
+    if (fill) {
+      if (serverProgress > 0) {
+        fill.style.width = serverProgress + '%';
+      } else if (filesTotal > 0) {
+        fill.style.width = Math.round((filesScanned / filesTotal) * 100) + '%';
+      } else if (parseFloat(fill.style.width) < 5) {
+        fill.style.width = '5%';
+      }
+    }
+    if (label && filesTotal > 0) {
+      label.textContent = `${filesScanned} / ${filesTotal} files`;
     }
 
+    // Log new file being scanned
     if (currentFile && currentFile !== applyProgressUpdate._lastFile) {
       applyProgressUpdate._lastFile = currentFile;
-      const log = document.getElementById('scan-log');
-      if (log) {
-        const ts = new Date().toISOString().substr(11, 8);
-        const stagePrefix = ['TRIAGE', 'HAIKU', 'SONNET', 'PATCH'][stage] || 'SCAN';
-        log.textContent += `${ts}  [${stagePrefix}] Scanning ${currentFile}...\n`;
-        log.scrollTop = log.scrollHeight;
+      const stagePrefix = ['TRIAGE', 'HAIKU', 'SONNET', 'PATCH'][stage] || 'SCAN';
+      appendScanLog(`[${stagePrefix}] Scanning ${currentFile}...`);
+    }
+
+    // Log batch progress (deduplicated)
+    if (batchTotal > 0) {
+      const batchKey = `${batchCurrent}/${batchTotal}`;
+      if (batchKey !== applyProgressUpdate._lastBatch) {
+        applyProgressUpdate._lastBatch = batchKey;
+        appendScanLog(`[HAIKU] Analyzing batch ${batchCurrent} of ${batchTotal}...`);
       }
+    }
+
+    // Update signals-detected counter display
+    if (signalsDetected > 0 && signalsDetected !== applyProgressUpdate._lastSignals) {
+      applyProgressUpdate._lastSignals = signalsDetected;
+      appendScanLog(`[SIGNALS] Signals detected: ${signalsDetected}`);
+      // Update inline counter if element exists
+      const counter = document.getElementById('signals-counter');
+      if (counter) counter.textContent = `Signals detected: ${signalsDetected}`;
     }
   }
   applyProgressUpdate._lastFile = '';
+  applyProgressUpdate._lastBatch = '';
+  applyProgressUpdate._lastSignals = 0;
 
   function startLoadingPhase(repoUrl, withPatches) {
     document.getElementById('loading-repo-url').textContent = repoUrl;
@@ -1567,7 +1602,7 @@
   // ══════════════════════════════════════════════
   // SCAN EXECUTION
   // ══════════════════════════════════════════════
-  const MAX_POLL_MS = 5 * 60 * 1000; // 5 minutes (MVP: fast-scan with Haiku)
+  const MAX_POLL_MS = 30 * 60 * 1000; // 30 min — large repos need time
 
   function showError(msg) {
     const errEl = document.getElementById('scan-error');
@@ -1584,20 +1619,23 @@
   function stopPolling() {
     clearInterval(state.pollTimer);
     state.pollTimer = null;
+    startPolling._longRunningNotified = false;
   }
 
   function startPolling(jobId) {
     const pollStart = Date.now();
+    startPolling._longRunningNotified = false;
 
     state.pollTimer = setInterval(async () => {
-      // Client-side timeout
-      if (Date.now() - pollStart > MAX_POLL_MS) {
-        stopPolling();
-        stopLoadingTimers();
-        showPhase('input');
-        showError('Scan timed out. Keep repos under 50k LOC for fast MVP scanning.');
-        resetButton();
-        return;
+      // After MAX_POLL_MS, show an informational note but keep polling — don't abort
+      if (Date.now() - pollStart > MAX_POLL_MS && !startPolling._longRunningNotified) {
+        startPolling._longRunningNotified = true;
+        const log = document.getElementById('scan-log');
+        if (log) {
+          const ts = new Date().toISOString().substr(11, 8);
+          log.textContent += `${ts}  [INFO] Scanning in progress — large repositories may take 10–30 minutes. Keep this tab open.\n`;
+          log.scrollTop = log.scrollHeight;
+        }
       }
 
       try {
@@ -1606,7 +1644,7 @@
 
         const status = await res.json();
 
-        if (status.status === 'running') {
+        if (status.status === 'running' || status.status === 'queued') {
           applyProgressUpdate(status);
           return;
         }

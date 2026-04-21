@@ -1,9 +1,11 @@
 """Agent orchestrator — full SWIFT pipeline: triage → haiku → sonnet → patch → sandbox."""
 from __future__ import annotations
 
+import json
 import os
 import time
 import uuid
+from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
@@ -26,6 +28,18 @@ logger = get_logger()
 
 # Batch size for Haiku scanning. Process files in chunks to manage memory/timeout.
 HAIKU_BATCH_SIZE = 50
+
+
+def _serialize_findings_sample(vulns: List, max_items: int = 100) -> str:
+    """Serialize the first max_items findings to a compact JSON string.
+
+    Caps output to avoid DB bloat on large repos with 600+ signals.
+    """
+    sample = vulns[:max_items]
+    try:
+        return json.dumps([asdict(v) for v in sample])
+    except Exception:
+        return "[]"
 
 
 def scan_codebase(
@@ -90,8 +104,9 @@ def scan_codebase(
     # Process files in batches to manage memory and prevent timeouts on large codebases.
     haiku_results: dict[str, tuple[str, list[int]]] = {}
     flagged_items = list(flagged_map.items())
+    num_batches = max(1, (len(flagged_items) + HAIKU_BATCH_SIZE - 1) // HAIKU_BATCH_SIZE)
 
-    for batch_start in range(0, len(flagged_items), HAIKU_BATCH_SIZE):
+    for batch_num, batch_start in enumerate(range(0, len(flagged_items), HAIKU_BATCH_SIZE)):
         batch_end = min(batch_start + HAIKU_BATCH_SIZE, len(flagged_items))
         batch = flagged_items[batch_start:batch_end]
 
@@ -103,6 +118,10 @@ def scan_codebase(
                 "files_total": files_scanned,
                 "files_scanned": global_idx,
                 "current_file": os.path.basename(file_path),
+                "batch_current": batch_num + 1,
+                "batch_total": num_batches,
+                "progress": int((global_idx / max(files_scanned, 1)) * 60),  # 0–60%
+                "signals_detected": 0,
             })
             try:
                 with open(file_path, encoding="utf-8", errors="replace") as fh:
@@ -128,7 +147,7 @@ def scan_codebase(
             except Exception as exc:
                 logger.error("Haiku scan error %s: %s", file_path, exc)
 
-        logger.info("Haiku batch %d/%d: %d results", batch_end // HAIKU_BATCH_SIZE, (len(flagged_items) + HAIKU_BATCH_SIZE - 1) // HAIKU_BATCH_SIZE, len(haiku_results))
+        logger.info("Haiku batch %d/%d: %d results", batch_num + 1, num_batches, len(haiku_results))
 
     logger.info("Haiku phase: %d files scanned from %d flagged", len(haiku_results), len(flagged_items))
     _emit({
@@ -144,14 +163,17 @@ def scan_codebase(
     # marked REVIEW_REQUIRED with confidence ~0.7 for manual verification.
     vulnerabilities: List[Vulnerability] = []
     signal_counter = 0
+    num_haiku_files = max(len(haiku_results), 1)
 
     for f_idx, (file_path, (source, line_numbers)) in enumerate(haiku_results.items()):
         _emit({
             "stage": 2,
             "stage_name": "review_required",
-            "files_total": len(haiku_results),
+            "files_total": num_haiku_files,
             "files_scanned": f_idx,
             "current_file": os.path.basename(file_path),
+            "progress": 60 + int((f_idx / num_haiku_files) * 35),  # 60–95%
+            "signals_detected": signal_counter,
         })
         for line_num in line_numbers:
             try:
@@ -188,6 +210,18 @@ def scan_codebase(
                 metrics.record_vulnerability(vuln.id)
             except Exception as exc:
                 logger.error("Signal conversion error %s:%d: %s", file_path, line_num, exc)
+
+        # Emit incremental findings snapshot at end of each file (capped to 100 items)
+        _emit({
+            "stage": 2,
+            "stage_name": "review_required",
+            "files_total": num_haiku_files,
+            "files_scanned": f_idx + 1,
+            "current_file": os.path.basename(file_path),
+            "progress": 60 + int(((f_idx + 1) / num_haiku_files) * 35),
+            "signals_detected": signal_counter,
+            "findings_json": _serialize_findings_sample(vulnerabilities),
+        })
 
     logger.info("Signals generated: %d REVIEW_REQUIRED findings", signal_counter)
     logger.debug("Files discovered: %d, files passed to Haiku: %d", files_scanned, len(haiku_results))
