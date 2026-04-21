@@ -217,7 +217,6 @@ def _run_scan(job_id: str, repo: str, patches: bool) -> None:
     cleanup = None
     db = SessionLocal()
     try:
-        create_scan_job(db, job_id)
 
         if is_github_url(repo):
             repo_path, cleanup = clone_repo(repo)
@@ -257,8 +256,9 @@ def _run_scan(job_id: str, repo: str, patches: bool) -> None:
 
 
 @app.post("/scan")
-def trigger_scan(body: ScanRequest, background_tasks: BackgroundTasks):
+def trigger_scan(body: ScanRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     job_id = str(uuid.uuid4())
+    create_scan_job(db, job_id)  # Create job immediately (don't wait for background task)
     background_tasks.add_task(_run_scan, job_id, body.repo, body.patches)
     return {"scan_id": job_id, "status": "running"}
 
