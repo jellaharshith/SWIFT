@@ -37,3 +37,50 @@ def test_metrics_collector_vuln_tracking():
     m.record_vulnerability("SWIFT-001")
     m.record_vulnerability("SWIFT-002")
     assert m.vulnerability_count == 2
+
+
+def test_logger_info_uses_lowercase_info(capsys):
+    """Verify [info] not [INFO] in log output."""
+    logger = get_logger("test_info")
+    logger.info("test message")
+    captured = capsys.readouterr()
+    assert "[info]" in captured.err
+    assert "[INFO]" not in captured.err
+
+
+def test_logger_warning_uses_lowercase():
+    """Verify [warning] not [WARNING] in log output."""
+    import io
+
+    logger = get_logger("test_warning")
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setLevel(logging.WARNING)
+
+    from log.logger import _LowercaseLevelFormatter
+    handler.setFormatter(_LowercaseLevelFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    logger.addHandler(handler)
+
+    logger.warning("test warning")
+    output = stream.getvalue()
+    assert "[warning]" in output
+    assert "[WARNING]" not in output
+
+
+def test_logger_error_uses_lowercase():
+    """Verify [error] not [ERROR] in log output."""
+    import io
+
+    logger = get_logger("test_error")
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setLevel(logging.ERROR)
+
+    from log.logger import _LowercaseLevelFormatter
+    handler.setFormatter(_LowercaseLevelFormatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s"))
+    logger.addHandler(handler)
+
+    logger.error("test error")
+    output = stream.getvalue()
+    assert "[error]" in output
+    assert "[ERROR]" not in output
