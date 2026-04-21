@@ -162,6 +162,16 @@ class TestJSONFormatter:
         parsed = json.loads(JSONFormatter().format(result))
         assert parsed["exploit_chains"] == []
 
+    def test_json_includes_structured_artifact_sections(self):
+        """JSON output must include findings/chains/ranked artifact sections."""
+        result = _make_scan_result(vulns=[_make_vuln()], chains=[_make_chain()])
+        result.ranked_findings = [_make_vuln()]
+        parsed = json.loads(JSONFormatter().format(result))
+        artifacts = parsed["artifacts"]
+        assert "findings.json" in artifacts
+        assert "exploit_chains.json" in artifacts
+        assert "ranked_findings.json" in artifacts
+
     def test_json_phase3_fields_present(self):
         """JSON output must include Phase 3 risk scoring fields (risk_score, exploitability, business_impact_category)."""
         vuln_with_phase3 = Vulnerability(

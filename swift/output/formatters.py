@@ -108,6 +108,57 @@ class JSONFormatter:
                 }
                 for c in result.exploit_chains
             ],
+            "ranked_findings": [
+                {
+                    "id": v.id,
+                    "file_path": v.file_path,
+                    "line_number": v.line_number,
+                    "vuln_type": v.vuln_type,
+                    "severity": v.severity,
+                    "confidence": v.confidence,
+                    "risk_score": v.risk_score,
+                }
+                for v in result.ranked_findings
+            ],
+            "artifacts": {
+                "findings.json": [
+                    {
+                        "id": v.id,
+                        "file_path": v.file_path,
+                        "line_number": v.line_number,
+                        "vuln_type": v.vuln_type,
+                        "description": v.description,
+                        "severity": v.severity,
+                        "confidence": v.confidence,
+                        "risk_score": v.risk_score,
+                    }
+                    for v in result.vulnerabilities
+                ],
+                "exploit_chains.json": [
+                    {
+                        "chain_id": c.chain_id,
+                        "name": c.name,
+                        "vulnerability_ids": c.vulnerability_ids,
+                        "entry_point": c.entry_point,
+                        "impact": c.impact,
+                        "severity": c.severity,
+                        "confidence": c.confidence,
+                    }
+                    for c in result.exploit_chains
+                ],
+                "ranked_findings.json": [
+                    {
+                        "id": v.id,
+                        "file_path": v.file_path,
+                        "line_number": v.line_number,
+                        "vuln_type": v.vuln_type,
+                        "severity": v.severity,
+                        "confidence": v.confidence,
+                        "risk_score": v.risk_score,
+                    }
+                    for v in result.ranked_findings
+                ],
+            },
         }
 
         return json.dumps(payload, indent=2)
