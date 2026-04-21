@@ -22,50 +22,52 @@ class TestFullPipelineWithMockApi:
     """Wire triage → haiku → sonnet together using mocks, no real API calls."""
 
     def test_full_pipeline_with_mock_api(self, tmp_path, monkeypatch):
-        """Full pipeline must return a ScanResult with 1 confirmed vulnerability."""
+        """Full pipeline must return a ScanResult with 1 SIGNAL-* REVIEW_REQUIRED finding.
+
+        In MVP mode the orchestrator converts Haiku signals directly to findings
+        without calling Sonnet deep-analysis. One Haiku-flagged line → one SIGNAL-*
+        vulnerability with confidence 0.7 and status REVIEW_REQUIRED.
+        """
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
 
-        # Create a vulnerable-looking file
         app_py = tmp_path / "app.py"
         app_py.write_text('query = f"SELECT * FROM users WHERE id={uid}"\n')
-
-        sonnet_mock = MagicMock()
-        sonnet_mock.analyze_line.return_value = _make_vuln(0.97)
 
         haiku_mock = MagicMock()
         haiku_mock.scan_lines.return_value = {1}
 
         with patch("agent.orchestrator.triage_codebase", return_value={str(app_py): [1]}):
             with patch("agent.orchestrator.HaikuTriageScanner", return_value=haiku_mock):
-                with patch("agent.orchestrator.SonnetAnalysisScanner", return_value=sonnet_mock):
-                    with patch("agent.orchestrator.anthropic.Anthropic"):
-                        from agent.orchestrator import scan_codebase
-                        result = scan_codebase(str(tmp_path))
+                with patch("agent.orchestrator.anthropic.Anthropic"):
+                    from agent.orchestrator import scan_codebase
+                    result = scan_codebase(str(tmp_path))
 
         assert isinstance(result, ScanResult)
         assert len(result.vulnerabilities) == 1
-        assert result.vulnerabilities[0].confidence == 0.97
+        vuln = result.vulnerabilities[0]
+        assert vuln.id.startswith("SIGNAL-")
+        assert vuln.status == "REVIEW_REQUIRED"
+        assert vuln.confidence == 0.7
 
-    def test_95_rule_end_to_end(self, tmp_path, monkeypatch):
-        """Sonnet returning confidence=0.94 must result in 0 vulnerabilities."""
+    def test_no_haiku_signals_gives_empty_result(self, tmp_path, monkeypatch):
+        """When Haiku finds no suspicious lines the result must have 0 vulnerabilities.
+
+        In MVP mode the pipeline is: triage → Haiku → SIGNAL-* findings.
+        Sonnet deep-analysis is disabled. Zero Haiku signals → zero findings.
+        """
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
 
         app_py = tmp_path / "app.py"
         app_py.write_text('query = f"SELECT * FROM users WHERE id={uid}"\n')
 
-        # Sonnet gate suppresses 0.94 → returns None
-        sonnet_mock = MagicMock()
-        sonnet_mock.analyze_line.return_value = None
-
         haiku_mock = MagicMock()
-        haiku_mock.scan_lines.return_value = {1}
+        haiku_mock.scan_lines.return_value = set()  # Haiku finds nothing
 
         with patch("agent.orchestrator.triage_codebase", return_value={str(app_py): [1]}):
             with patch("agent.orchestrator.HaikuTriageScanner", return_value=haiku_mock):
-                with patch("agent.orchestrator.SonnetAnalysisScanner", return_value=sonnet_mock):
-                    with patch("agent.orchestrator.anthropic.Anthropic"):
-                        from agent.orchestrator import scan_codebase
-                        result = scan_codebase(str(tmp_path))
+                with patch("agent.orchestrator.anthropic.Anthropic"):
+                    from agent.orchestrator import scan_codebase
+                    result = scan_codebase(str(tmp_path))
 
         assert result.vulnerabilities == []
 

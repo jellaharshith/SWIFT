@@ -100,21 +100,22 @@ class TestScanCodebase:
                 result = scan_codebase(str(tmp_path))
         assert result.duration_seconds >= 0.0
 
-    def test_scan_only_includes_high_confidence(self, tmp_path, monkeypatch):
-        """Vulnerabilities with confidence 0.94 must NOT appear in result."""
+    def test_scan_no_haiku_signals_gives_empty_result(self, tmp_path, monkeypatch):
+        """When Haiku finds no suspicious lines, the result must have 0 vulnerabilities.
+
+        The orchestrator converts Haiku signals directly to SIGNAL-* REVIEW_REQUIRED
+        findings (Sonnet deep-analysis is disabled for MVP stability). With no signals
+        there are no findings.
+        """
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-        vuln_94 = _make_vuln(confidence=0.94)
-        # Sonnet returns 0.94 → should be suppressed by the scanner itself
-        # We verify by giving sonnet_mock return value of None (mimics 95% gate)
         file_path = str(tmp_path / "app.py")
         with open(file_path, "w") as f:
             f.write("query = f'SELECT * FROM users WHERE id={uid}'\n")
 
         flagged = {file_path: [1]}
         with _mock_triage(flagged):
-            haiku_patch, haiku_mock = _mock_haiku({1})
-            sonnet_patch, sonnet_mock = _mock_sonnet(None)  # gate suppresses it
-            with haiku_patch, sonnet_patch:
+            haiku_patch, haiku_mock = _mock_haiku(set())  # Haiku finds nothing
+            with haiku_patch:
                 with patch("agent.orchestrator.anthropic.Anthropic"):
                     from agent.orchestrator import scan_codebase
                     result = scan_codebase(str(tmp_path))
@@ -136,8 +137,13 @@ class TestScanCodebase:
                     scan_codebase(str(tmp_path))
         haiku_mock.scan_lines.assert_called()
 
-    def test_scan_calls_sonnet_on_flagged_lines(self, tmp_path, monkeypatch):
-        """Sonnet scanner must be called for each line flagged by Haiku."""
+    def test_scan_haiku_signals_create_findings(self, tmp_path, monkeypatch):
+        """Haiku signals are converted to SIGNAL-* REVIEW_REQUIRED findings.
+
+        The orchestrator (MVP mode) bypasses Sonnet deep-analysis and converts
+        each Haiku-flagged line directly into a SIGNAL-* vulnerability with
+        REVIEW_REQUIRED status and confidence ~0.7.
+        """
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
         file_path = str(tmp_path / "app.py")
         with open(file_path, "w") as f:
@@ -145,13 +151,16 @@ class TestScanCodebase:
 
         flagged = {file_path: [1]}
         with _mock_triage(flagged):
-            haiku_patch, haiku_mock = _mock_haiku({1})
-            sonnet_patch, sonnet_mock = _mock_sonnet(None)
-            with haiku_patch, sonnet_patch:
+            haiku_patch, haiku_mock = _mock_haiku({1})  # Haiku flags line 1
+            with haiku_patch:
                 with patch("agent.orchestrator.anthropic.Anthropic"):
                     from agent.orchestrator import scan_codebase
-                    scan_codebase(str(tmp_path))
-        sonnet_mock.analyze_line.assert_called()
+                    result = scan_codebase(str(tmp_path))
+        assert len(result.vulnerabilities) == 1
+        vuln = result.vulnerabilities[0]
+        assert vuln.id.startswith("SIGNAL-")
+        assert vuln.status == "REVIEW_REQUIRED"
+        assert vuln.confidence == 0.7
 
     def test_scan_timestamp_is_iso(self, tmp_path, monkeypatch):
         """ScanResult.timestamp must be a valid ISO 8601 string."""
