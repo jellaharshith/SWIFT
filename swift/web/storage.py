@@ -24,6 +24,21 @@ class Base(DeclarativeBase):
     pass
 
 
+class ScanJob(Base):
+    """ORM model for tracking in-progress scan jobs (status, progress, errors)."""
+
+    __tablename__ = "scan_jobs"
+
+    job_id = Column(String, primary_key=True)
+    status = Column(String, nullable=False)  # "running", "done", "error"
+    stage = Column(Integer, default=0)
+    stage_name = Column(String, default="")
+    files_total = Column(Integer, default=0)
+    files_scanned = Column(Integer, default=0)
+    current_file = Column(String, default="")
+    detail = Column(String, nullable=True)  # error message if status="error"
+
+
 class ScanRecord(Base):
     """ORM model representing a persisted scan result."""
 
@@ -122,6 +137,57 @@ def get_scan(session: Session, scan_id: str) -> Optional[ScanRecord]:
         The matching ScanRecord or None if not found.
     """
     return session.query(ScanRecord).filter(ScanRecord.scan_id == scan_id).first()
+
+
+def create_scan_job(session: Session, job_id: str) -> ScanJob:
+    """Create a new scan job record in running state.
+
+    Args:
+        session: Active SQLAlchemy session.
+        job_id: Unique job identifier.
+
+    Returns:
+        The newly created ScanJob record.
+    """
+    job = ScanJob(job_id=job_id, status="running")
+    session.add(job)
+    session.commit()
+    return job
+
+
+def update_scan_job(session: Session, job_id: str, **kwargs) -> Optional[ScanJob]:
+    """Update scan job progress or status.
+
+    Args:
+        session: Active SQLAlchemy session.
+        job_id: Unique job identifier.
+        **kwargs: Fields to update (status, stage, stage_name, files_total, etc.).
+
+    Returns:
+        Updated ScanJob or None if not found.
+    """
+    job = session.query(ScanJob).filter(ScanJob.job_id == job_id).first()
+    if not job:
+        return None
+    for key, value in kwargs.items():
+        if hasattr(job, key):
+            setattr(job, key, value)
+    session.commit()
+    session.refresh(job)
+    return job
+
+
+def get_scan_job(session: Session, job_id: str) -> Optional[ScanJob]:
+    """Retrieve a scan job by its job ID.
+
+    Args:
+        session: Active SQLAlchemy session.
+        job_id: Unique job identifier.
+
+    Returns:
+        The matching ScanJob or None if not found.
+    """
+    return session.query(ScanJob).filter(ScanJob.job_id == job_id).first()
 
 
 def get_metrics(session: Session) -> dict:
