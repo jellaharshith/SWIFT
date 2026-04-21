@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import itertools
 import json
+import re
 from typing import Any, Optional
 
 from agent.models import Vulnerability
@@ -154,8 +155,10 @@ class SonnetAnalysisScanner:
     def _parse_response(
         self, raw: str, file_path: str, line_number: int
     ) -> Optional[Vulnerability]:
+        # Try to extract JSON from markdown code blocks (e.g., ```json {...}```)
+        json_str = self._extract_json(raw)
         try:
-            data = json.loads(raw)
+            data = json.loads(json_str)
         except json.JSONDecodeError:
             logger.warning("Sonnet returned invalid JSON for %s:%d", file_path, line_number)
             return None
@@ -209,3 +212,24 @@ class SonnetAnalysisScanner:
             remediation_time_minutes=remediation_time,
             references=references,
         )
+
+    @staticmethod
+    def _extract_json(raw: str) -> str:
+        """Extract JSON from markdown code blocks or raw text.
+
+        Handles:
+        - ```json {...}```
+        - ```{...}```
+        - Raw JSON
+        """
+        # Try markdown code blocks first
+        match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', raw)
+        if match:
+            return match.group(1)
+
+        # Try raw JSON (find { and })
+        match = re.search(r'\{[\s\S]*\}', raw)
+        if match:
+            return match.group(0)
+
+        return raw
