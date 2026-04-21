@@ -118,9 +118,11 @@ class ScanResult:
     total_cost_usd: float
     timestamp: str
     exploit_chains: List[ExploitChain] = field(default_factory=list)
+    ranked_findings: List[Vulnerability] = field(default_factory=list)
     status: str = "complete"  # "complete" or "partial_success"
     signals_detected: int = 0  # Total signals/findings detected
     signals_triaged: int = 0  # Signals selected for chain detection
+    chain_detection_error: Optional[str] = None
 
 
 @dataclass

@@ -10,6 +10,7 @@ from typing import Callable, List, Optional
 import anthropic
 
 from agent.models import Patch, ScanResult, Vulnerability
+from agent.vuln_chain_auditor import VulnerabilityChainAuditor
 from chains.detector import ExploitChainDetector
 from config.settings import get_config
 from log.logger import MetricsCollector, get_logger
@@ -60,6 +61,7 @@ def scan_codebase(
     )
     sonnet = SonnetAnalysisScanner(client, model=config.sonnet_model)
     chain_detector = ExploitChainDetector(client, model=config.sonnet_model)
+    chain_auditor = VulnerabilityChainAuditor()
 
     logger.info("Scan %s started on %s", scan_id, repo_path)
     start = time.monotonic()
@@ -209,11 +211,35 @@ def scan_codebase(
     triaged_findings = scorer.triage_findings(vulnerabilities)
     logger.info("Triage: %d / %d findings selected for chain detection", len(triaged_findings), len(vulnerabilities))
 
-    # --- Phase 3.5: Exploit chain detection (best-effort) ---
+    # --- Phase 3.5: Exploit chain detection and ranking ---
     exploit_chains = []
+    ranked_findings: List[Vulnerability] = []
+    chain_detection_error: Optional[str] = None
     if triaged_findings:
-        exploit_chains = chain_detector.detect_chains(triaged_findings)
-        logger.info("Chain detection: %d exploit chains identified", len(exploit_chains))
+        try:
+            # First pass: deterministic graph-based chain discovery and ranking.
+            audit = chain_auditor.audit(triaged_findings)
+            exploit_chains = audit.exploit_chains
+            ranked_findings = audit.ranked_findings
+
+            # Optional second pass: LLM chain detector can append additional context.
+            llm_chains = chain_detector.detect_chains(triaged_findings)
+            if llm_chains:
+                exploit_chains.extend(llm_chains)
+
+            logger.info(
+                "Chain detection: %d exploit chains identified, %d ranked findings",
+                len(exploit_chains),
+                len(ranked_findings),
+            )
+        except Exception as exc:
+            chain_detection_error = str(exc)
+            logger.error(
+                "chain_detection_failed scan_id=%s triaged_findings=%d error=%s",
+                scan_id,
+                len(triaged_findings),
+                chain_detection_error,
+            )
     else:
         logger.debug("Skipped chain detection: no triaged findings")
 
@@ -226,6 +252,8 @@ def scan_codebase(
         # Only mark partial if we had findings but couldn't detect chains
         # (not if chains were legitimately empty)
         status = "partial_success"
+    if chain_detection_error:
+        status = "partial_success"
 
     result = ScanResult(
         scan_id=scan_id,
@@ -237,9 +265,11 @@ def scan_codebase(
         total_cost_usd=metrics.total_cost_usd,
         timestamp=datetime.now(timezone.utc).isoformat(),
         exploit_chains=exploit_chains,
+        ranked_findings=ranked_findings,
         status=status,
         signals_detected=signal_counter,
         signals_triaged=len(triaged_findings),
+        chain_detection_error=chain_detection_error,
     )
 
     # --- Phase 4: Patch generation (optional) ---
@@ -305,6 +335,8 @@ def generate_patches(scan_result: ScanResult) -> ScanResult:
         total_cost_usd=scan_result.total_cost_usd,
         timestamp=scan_result.timestamp,
         exploit_chains=scan_result.exploit_chains,
+        ranked_findings=scan_result.ranked_findings,
+        chain_detection_error=scan_result.chain_detection_error,
     )
 
 
