@@ -46,6 +46,11 @@ class Vulnerability:
     confidence: float  # 0.0–1.0, NOT percent
     severity: str      # CRITICAL, HIGH, MEDIUM, LOW
     code_snippet: str
+    # Internal pipeline status (set by SonnetAnalysisScanner).
+    # The normalised report formatter remaps these to the three allowed output
+    # labels: HIGH_CONFIDENCE_VULNERABILITY | LIKELY_VULNERABILITY | REVIEW_REQUIRED.
+    # "CONFIRMED" is retained here for pipeline compatibility but must NEVER be
+    # written directly to customer-facing reports — use NormalizedReportFormatter.
     status: str = "CONFIRMED"  # CONFIRMED (≥95%) or REVIEW_REQUIRED (65-95%)
     cwe_id: Optional[str] = None
     cwe_url: Optional[str] = None

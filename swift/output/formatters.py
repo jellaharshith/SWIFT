@@ -5,6 +5,7 @@ import json
 from typing import Dict
 
 from agent.models import ScanResult
+from output.report_normalizer import NormalizedReportFormatter
 
 
 class JSONFormatter:
@@ -300,20 +301,24 @@ def format_output(result: ScanResult, format_type: str) -> str:
 
     Args:
         result: Completed scan result to format.
-        format_type: One of 'json' or 'markdown'.
+        format_type: One of 'json', 'markdown', or 'report'.
+            'report' produces a normalised, human-readable security report
+            that is low-noise and demo-ready (recommended for sharing).
 
     Returns:
         Formatted string ready for output.
 
     Raises:
-        ValueError: If format_type is not 'json' or 'markdown'.
+        ValueError: If format_type is not a supported value.
     """
-    _SUPPORTED = ["json", "markdown"]
+    _SUPPORTED = ["json", "markdown", "report"]
 
     if format_type == "json":
         return JSONFormatter().format(result)
     elif format_type == "markdown":
         return MarkdownFormatter().format(result)
+    elif format_type == "report":
+        return NormalizedReportFormatter().format(result)
     else:
         raise ValueError(
             f"Unknown format '{format_type}'. Choose: {_SUPPORTED}"

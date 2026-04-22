@@ -21,9 +21,12 @@ def cli() -> None:
 @click.option(
     "--output",
     default="json",
-    type=click.Choice(["json", "markdown"], case_sensitive=False),
+    type=click.Choice(["json", "markdown", "report"], case_sensitive=False),
     show_default=True,
-    help="Output format.",
+    help=(
+        "Output format. 'report' produces a normalised, human-readable security "
+        "report that filters noise and is demo-ready (recommended for sharing)."
+    ),
 )
 @click.option(
     "--patches",
@@ -75,9 +78,12 @@ def scan(repo: str, output: str, gen_patches: bool, out_file: str | None) -> Non
 @click.option(
     "--output",
     default="json",
-    type=click.Choice(["json", "markdown"], case_sensitive=False),
+    type=click.Choice(["json", "markdown", "report"], case_sensitive=False),
     show_default=True,
-    help="Output format.",
+    help=(
+        "Output format. 'report' produces a normalised, human-readable security "
+        "report that filters noise and is demo-ready (recommended for sharing)."
+    ),
 )
 @click.option("--out-file", default=None, help="Write output to file instead of stdout.")
 def patch(repo: str, output: str, out_file: str | None) -> None:
