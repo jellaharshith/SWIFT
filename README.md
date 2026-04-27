@@ -54,17 +54,17 @@ echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
 
 ```bash
 # JSON output (APIs, dashboards)
-python main.py scan --repo /path/to/repo --output json
+python swift_cli.py scan --repo /path/to/repo --output json
 
 # Markdown report (email, PR comments)
-python main.py scan --repo /path/to/repo --output markdown
+python swift_cli.py scan --repo /path/to/repo --output markdown
 
 # SARIF (GitHub Code Scanning)
-python main.py scan --repo /path/to/repo --output sarif > results.sarif
+python swift_cli.py scan --repo /path/to/repo --output sarif > results.sarif
 gh code-scanning upload results.sarif
 
 # With patch generation
-python main.py scan --repo /path/to/repo --output json --patches
+python swift_cli.py scan --repo /path/to/repo --allow-patch-generation --output json
 ```
 
 #### Example Output
@@ -73,6 +73,57 @@ python main.py scan --repo /path/to/repo --output json --patches
 **Exploit chains:** 1 detected (SQL injection → privilege escalation → data theft)  
 **Patches:** 3 generated, all passed sandbox tests  
 **Cost:** $1.42 | **Time:** 2 minutes 45 seconds
+
+---
+
+## 🖥️ CLI Reference
+
+### Code Analysis
+
+```bash
+# Scan for vulnerabilities
+python swift_cli.py scan --repo . --output json|markdown
+
+# Fast triage only (alias)
+python swift_cli.py triage --repo .
+
+# Generate patches (requires flag)
+python swift_cli.py patch --repo . --allow-patch-generation
+
+# Validate a patch in Docker sandbox (requires flag)
+python swift_cli.py validate --repo . --patch-file patch.diff --target-file file.py --allow-sandbox
+
+# Generate report from previous scan
+python swift_cli.py report --repo . --format json|markdown
+
+# Full pipeline: scan → patch → validate
+python swift_cli.py full --repo . --allow-patch-generation --allow-sandbox
+```
+
+### Offensive Security (Kali Linux)
+
+```bash
+# Run Kali tools against a live target
+python swift_cli.py kali-scan --target <IP|hostname|URL> --tools all --live-cve --output-file results.json
+
+# Stream live CVEs from NVD + CISA KEV (every 2s)
+python swift_cli.py live-feed --severity CRITICAL --output stream
+
+# MITRE ATT&CK-mapped simulation
+python swift_cli.py attack-sim --target <IP> --technique T1046
+```
+
+### Zero-Trust Security Flags
+
+SWIFT is **fail-closed by default** — write operations require explicit opt-in:
+
+| Flag | Required for |
+|------|-------------|
+| `--allow-patch-generation` | `patch`, `full` |
+| `--allow-sandbox` | `validate`, `full` |
+| `--read-only` | Default; blocks mutations |
+| `--config <path>` | Fine-grained JSON config |
+| `--strict` | Strict validation mode |
 
 ---
 
@@ -217,14 +268,52 @@ cursor.execute(query, (user_id,))
 
 ---
 
+## 🗡️ Offensive Security (Kali Linux)
+
+Run industry-standard offensive tools against live targets in an isolated Kali Linux container:
+
+| Tool | Purpose |
+|------|---------|
+| nmap / masscan | Port + service discovery |
+| nikto | Web server vulnerability scan |
+| sqlmap | Automated SQL injection |
+| nuclei | Template-based CVE detection |
+| hydra | Credential brute-force |
+| gobuster | Directory/DNS enumeration |
+| searchsploit | Exploit-DB search |
+
+All tools map findings to **MITRE ATT&CK techniques** and correlate against the live CVE feed.
+
+```bash
+python swift_cli.py kali-scan --target 192.168.1.10 --tools nmap,sqlmap,nikto --live-cve
+```
+
+---
+
+## 📡 Live CVE Feed
+
+Streams real-time CVE data from **NVD** and **CISA KEV** every 2 seconds:
+
+```bash
+# Stream critical CVEs to terminal
+python swift_cli.py live-feed --severity CRITICAL --output stream
+
+# Export to JSON
+python swift_cli.py live-feed --severity HIGH --output json --interval 5
+```
+
+SWIFT automatically cross-references live CVEs against findings in your scan results.
+
+---
+
 ## 🧪 Test Coverage
 
-**338 tests, 97% coverage**
+**461+ tests, 97% coverage**
 
 | Suite | Tests | Status |
 |---|---|---|
-| Unit | 288 | ✅ Pass |
-| Integration | 49 | ✅ Pass |
+| Unit | 400+ | ✅ Pass |
+| Integration | 54 | ✅ Pass |
 | E2E | 7 | ⏭️ Gate `SWIFT_RUN_E2E=1` |
 
 **Phase-by-phase:**
@@ -292,7 +381,7 @@ jobs:
 ### SARIF Upload
 
 ```bash
-python main.py scan --repo /path/to/repo --output sarif > results.sarif
+python swift_cli.py scan --repo /path/to/repo --output sarif > results.sarif
 gh code-scanning upload results.sarif
 ```
 
@@ -333,18 +422,21 @@ json_out = JSONFormatter().format(result)
 
 ```
 swift/
-├── agent/              # Orchestration
-├── scanners/           # Haiku + Sonnet AI
-├── triage/             # Regex patterns + risk scoring
+├── agent/              # Orchestration (scan_codebase, generate_patches)
+├── scanners/           # Haiku triage + Sonnet deep analysis
+├── triage/             # Regex patterns, risk scoring, exploit graph
 ├── chains/             # Exploit chain detection
-├── patches/            # Patch generation + testing
-├── sandbox/            # Docker isolation
+├── patches/            # Patch generation + scoring
+├── sandbox/            # Docker isolation + testing
 ├── output/             # JSON, Markdown, SARIF formatters
-├── config/             # Settings
-├── log/                # Audit logging
+├── feeds/              # Live CVE feed (NVD + CISA KEV)
+├── kali/               # Kali Linux offensive tools + MITRE ATT&CK
+├── config/             # Settings + .env loading
+├── log/                # Forensic audit logging
 ├── cli/                # Click commands
-├── test/               # 338 tests
-└── main.py             # Entry point
+├── test/               # 461+ tests
+├── swift_cli.py        # Main CLI entry point
+└── main.py             # Legacy entry point
 ```
 
 ---
