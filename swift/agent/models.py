@@ -170,7 +170,7 @@ class MergedFinding:
     sources: List[str]
     code_finding: Optional[Vulnerability] = None
     kali_finding: Optional[dict] = None
-    cve_matches: list = field(default_factory=list)  # List[CVEMatch]
+    cve_matches: List["CVEMatch"] = field(default_factory=list)
     actively_exploited: bool = False
     correlation_confidence: float = 0.0
     mitre_techniques: List[dict] = field(default_factory=list)
@@ -207,7 +207,7 @@ class UnifiedScanResult:
     merged_findings: List[MergedFinding] = field(default_factory=list)
     code_only_findings: List[Vulnerability] = field(default_factory=list)
     kali_only_findings: List[dict] = field(default_factory=list)
-    all_cve_matches: list = field(default_factory=list)  # List[CVEMatch]
+    all_cve_matches: List["CVEMatch"] = field(default_factory=list)
     exploit_chains: List[ExploitChain] = field(default_factory=list)
     patches: List[Patch] = field(default_factory=list)
     report_md_path: Optional[str] = None
