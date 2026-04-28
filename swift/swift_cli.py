@@ -12,6 +12,10 @@ from typing import Any
 from output.formatters import JSONFormatter, MarkdownFormatter
 from patch_validator import validate_patch
 from sandbox_runner import run_in_sandbox
+from agent.agent_pool import AgentPool
+from analysis.privesc import PrivilegeEscalationAnalyzer
+from output.bug_bounty_report import BugBountyFormatter
+from output.pentest_report import PentestFormatter
 
 
 def _utc_now() -> str:
@@ -425,6 +429,69 @@ def _add_shared_flags(p: argparse.ArgumentParser, include_output: bool = True) -
     p.add_argument("--strict", action="store_true")
 
 
+_WIZARD_BANNER = """
+╔══════════════════════════════════════════╗
+║   SWIFT Security Scanner                 ║
+║   Powered by live CVEs + MITRE ATT&CK   ║
+╚══════════════════════════════════════════╝
+"""
+
+_WIZARD_MENU = """What do you want to scan?
+
+  1. Codebase   (static analysis — local path or GitHub URL)
+  2. URL        (web vuln scan — https://target.com)
+  3. Domain     (full recon — example.com)
+  4. Everything (codebase + domain/URL combined)
+"""
+
+
+def run_wizard(_args: Any) -> None:
+    """Interactive plain-English wizard for target selection and scanning."""
+    from config.consent import require_consent
+
+    print(_WIZARD_BANNER)
+    print(_WIZARD_MENU)
+
+    choice_str = input("Enter choice [1-4]: ").strip()
+    if choice_str not in ("1", "2", "3", "4"):
+        print("Invalid choice. Exiting.")
+        return
+
+    choice = int(choice_str)
+    repo_path: str | None = None
+    kali_target: str | None = None
+
+    if choice in (1, 4):
+        repo_path = input("Enter codebase path or GitHub URL: ").strip()
+    if choice in (2, 3, 4):
+        label = "URL" if choice == 2 else "Domain"
+        kali_target = input(f"Enter {label} to scan: ").strip()
+        require_consent()
+
+    artifacts_dir = Path(".swift-artifacts")
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    def progress(msg: str) -> None:
+        print(msg)
+
+    print()
+    result = asyncio.run(AgentPool().run_all(repo_path, kali_target, progress))
+
+    print("\n[PrivEsc] analyzing privilege escalation chains...")
+    paths = PrivilegeEscalationAnalyzer().analyze(result)
+    if paths:
+        print(f"[PrivEsc] {len(paths)} escalation path(s) found")
+
+    bounty_path = BugBountyFormatter().save(result, paths, str(artifacts_dir))
+    pentest_path = PentestFormatter().save(result, paths, str(artifacts_dir))
+
+    duration = getattr(result, "duration", 0)
+    print(f"\n✓ Scan complete in {duration:.0f}s\n")
+    print("Reports saved:")
+    print(f"  {bounty_path}  (HackerOne/Bugcrowd)")
+    print(f"  {pentest_path}  (Internal pentest)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="swift",
@@ -491,6 +558,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     atk.add_argument("--skip-build", action="store_true", help="Skip docker image build check")
 
+    sub.add_parser(
+        "wizard",
+        help="Interactive scanner wizard — choose codebase, URL, or domain in plain English",
+    )
+
     return parser
 
 
@@ -501,7 +573,7 @@ def main() -> None:
     if hasattr(args, "config"):
         _load_config(args.config)
 
-    if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan"}:
+    if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan", "wizard"}:
         _ensure_zero_trust(args)
 
     handlers = {
@@ -515,9 +587,10 @@ def main() -> None:
         "kali-scan": run_kali_scan,
         "live-feed": run_live_feed,
         "attack-sim": run_attack_sim,
+        "wizard": run_wizard,
     }
     payload = handlers[args.command](args)
-    if args.command not in {"live-feed"}:
+    if args.command not in {"live-feed", "wizard"}:
         print(json.dumps(payload, indent=2, sort_keys=True))
 
 
