@@ -212,3 +212,26 @@ class UnifiedScanResult:
     patches: List[Patch] = field(default_factory=list)
     report_md_path: Optional[str] = None
     report_txt_path: Optional[str] = None
+
+
+@dataclass
+class EscalationPath:
+    """Privilege escalation path connecting vulnerabilities to impact.
+
+    Represents a chain of vulnerabilities that can be exploited sequentially
+    to achieve privilege escalation or critical impact.
+
+    Attributes:
+        from_vuln: Starting vulnerability identifier (e.g., "sql_injection")
+        steps: List of escalation steps (human-readable descriptions)
+        to_impact: Final impact achieved (e.g., "account_takeover")
+        severity: Severity level of the escalation path (CRITICAL, HIGH, etc.)
+        finding_ids: List of finding IDs involved in this escalation chain
+        ascii_chain: ASCII visualization of the escalation path
+    """
+    from_vuln: str
+    steps: List[str]
+    to_impact: str
+    severity: str
+    finding_ids: List[str]
+    ascii_chain: str
