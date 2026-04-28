@@ -32,8 +32,9 @@ class PrivilegeEscalationAnalyzer:
         for cf in result.code_only_findings:
             triples.append((cf.vuln_type, cf.id, False))
         for kf in result.kali_only_findings:
-            vt = kf.get("vuln_type", "") if isinstance(kf, dict) else ""
-            triples.append((vt, kf.get("id", "kali"), False))
+            if not isinstance(kf, dict):
+                continue
+            triples.append((kf.get("vuln_type", ""), kf.get("id", "kali"), False))
 
         paths: list[EscalationPath] = []
         for vuln_type, finding_id, actively_exploited in triples:

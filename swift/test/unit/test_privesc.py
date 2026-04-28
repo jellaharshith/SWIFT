@@ -70,3 +70,16 @@ def test_multiple_vulns_produce_multiple_paths():
     types = {p.from_vuln for p in paths}
     assert "sql_injection" in types
     assert "ssrf" in types
+
+
+def test_kali_finding_produces_escalation_path():
+    result = MagicMock(spec=UnifiedScanResult)
+    result.merged_findings = []
+    result.code_only_findings = []
+    result.kali_only_findings = [
+        {"vuln_type": "command_injection", "id": "KALI-001"}
+    ]
+    paths = PrivilegeEscalationAnalyzer().analyze(result)
+    assert len(paths) == 1
+    assert paths[0].from_vuln == "command_injection"
+    assert paths[0].severity == "CRITICAL"
