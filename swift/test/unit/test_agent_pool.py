@@ -48,6 +48,17 @@ def test_web_agent_emits_label():
     assert any("[WebAgent]" in l for l in labels)
 
 
+def test_cve_agent_emits_label():
+    labels = []
+    with patch("agent.agent_pool.LiveCVEFeed") as MockFeed:
+        async def fake_poll(callback):
+            pass
+        MockFeed.return_value.poll_forever.side_effect = fake_poll
+        agent = CVEAgent()
+        asyncio.run(agent.run(0.01, lambda msg: labels.append(msg)))
+    assert any("[CVEAgent]" in l for l in labels)
+
+
 def test_agent_pool_returns_unified_scan_result():
     with (
         patch("agent.agent_pool.scan_codebase", return_value=_make_scan_result()),
