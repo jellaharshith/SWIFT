@@ -70,6 +70,15 @@ class BugBountyFormatter:
         result: UnifiedScanResult,
         escalation_paths: list[EscalationPath],
     ) -> str:
+        """Format a HackerOne/Bugcrowd-style bug bounty report.
+
+        Args:
+            result: Unified scan result containing all findings.
+            escalation_paths: Privilege escalation paths from PrivilegeEscalationAnalyzer.
+
+        Returns:
+            Markdown string with per-finding sections including PoC steps and impact.
+        """
         header = [
             "# Bug Bounty Report — SWIFT Security Scanner",
             "",
@@ -92,6 +101,16 @@ class BugBountyFormatter:
         escalation_paths: list[EscalationPath],
         artifacts_dir: str,
     ) -> str:
+        """Save bug bounty report to artifacts directory.
+
+        Args:
+            result: Unified scan result.
+            escalation_paths: Privilege escalation paths.
+            artifacts_dir: Directory to write report file.
+
+        Returns:
+            Absolute path to the saved report file.
+        """
         content = self.format_markdown(result, escalation_paths)
         path = os.path.join(artifacts_dir, f"report-bounty-{result.scan_id}.md")
         with open(path, "w") as f:
