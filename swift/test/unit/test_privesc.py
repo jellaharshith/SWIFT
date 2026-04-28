@@ -1,5 +1,4 @@
-# swift/test/unit/test_privesc.py
-from swift.agent.models import EscalationPath
+from agent.models import EscalationPath
 
 def test_escalation_path_fields():
     path = EscalationPath(
