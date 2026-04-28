@@ -37,7 +37,7 @@ class UnifiedReportFormatter:
         out.mkdir(parents=True, exist_ok=True)
 
         md_content = self.format_markdown(result)
-        txt_content = self.format_txt(result)
+        txt_content = self._md_to_txt(md_content)
 
         md_path = out / f"report-{result.scan_id}.md"
         txt_path = out / f"report-{result.scan_id}.txt"
@@ -143,8 +143,8 @@ class UnifiedReportFormatter:
             if mf.cve_matches:
                 cve_parts = []
                 for cm in mf.cve_matches:
-                    cve_id = cm.cve.cve_id if hasattr(cm, "cve") else ""
-                    cvss = cm.cve.cvss_score if hasattr(cm, "cve") else ""
+                    cve_id = cm.cve.cve_id
+                    cvss = cm.cve.cvss_score
                     if cve_id:
                         cve_parts.append(f"{cve_id} (CVSS: {cvss})")
                 if cve_parts:
@@ -190,12 +190,12 @@ class UnifiedReportFormatter:
         lines.append("| CVE ID | CVSS | Severity | CISA KEV | Finding ID | Match Reason |")
         lines.append("|--------|------|----------|----------|------------|--------------|")
         for cm in result.all_cve_matches:
-            cve_id = cm.cve.cve_id if hasattr(cm, "cve") else ""
-            cvss = cm.cve.cvss_score if hasattr(cm, "cve") else ""
-            severity = cm.cve.severity if hasattr(cm, "cve") else ""
-            kev = "Yes" if (hasattr(cm, "cve") and cm.cve.cisa_known_exploited) else "No"
-            finding_id = cm.matched_finding_id if hasattr(cm, "matched_finding_id") else ""
-            reason = cm.match_reason if hasattr(cm, "match_reason") else ""
+            cve_id = cm.cve.cve_id
+            cvss = cm.cve.cvss_score
+            severity = cm.cve.severity
+            kev = "Yes" if cm.cve.cisa_known_exploited else "No"
+            finding_id = self._safe_cell(cm.matched_finding_id)
+            reason = self._safe_cell(cm.match_reason)
             lines.append(
                 f"| {cve_id} | {cvss} | {severity} | {kev} | {finding_id} | {reason} |"
             )
@@ -223,8 +223,9 @@ class UnifiedReportFormatter:
             lines.append(f"**File:** `{p.file_path}`")
             lines.append(f"**Vuln ID:** {p.vuln_id}")
             # First 20 lines of diff
-            diff_lines = p.diff.splitlines()[:20]
-            truncated = len(p.diff.splitlines()) > 20
+            all_diff_lines = p.diff.splitlines()
+            diff_lines = all_diff_lines[:20]
+            truncated = len(all_diff_lines) > 20
             lines.append("```diff")
             lines.extend(diff_lines)
             if truncated:
@@ -255,8 +256,10 @@ class UnifiedReportFormatter:
                 counts["LOW"] += 1
 
         for kf in result.kali_only_findings:
-            # Kali findings have no severity field; default to MEDIUM
-            counts["MEDIUM"] += 1
+            sev = kf.get("severity", "MEDIUM").upper()
+            if sev not in counts:
+                sev = "MEDIUM"
+            counts[sev] += 1
 
         return counts
 
@@ -265,11 +268,19 @@ class UnifiedReportFormatter:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _safe_cell(val: str) -> str:
+        return str(val).replace("|", "\\|").replace("\n", " ")
+
+    @staticmethod
     def _md_to_txt(md: str) -> str:
         lines = md.splitlines()
         result_lines: list[str] = []
 
         for line in lines:
+            # Strip table separator rows (|---|---|)
+            if re.match(r"^\|[-| ]+\|$", line.strip()):
+                continue
+
             # H1: # Title -> TITLE\n======
             h1 = re.match(r"^# (.+)$", line)
             if h1:
