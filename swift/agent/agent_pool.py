@@ -1,12 +1,22 @@
 from __future__ import annotations
 import asyncio
 import time
+import uuid
+from datetime import datetime, timezone
 from typing import Callable, List, Optional
 from agent.orchestrator import scan_codebase
 from agent.correlator import Correlator
 from kali.runner import KaliRunner
 from feeds.live_cve import LiveCVEFeed, CVEEntry
 from agent.models import ScanResult, UnifiedScanResult
+
+
+def _make_scan_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def _format_timestamp(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
 class CodeAgent:
@@ -109,8 +119,21 @@ class AgentPool:
             kali_result["tools"].extend(web_tools.get("tools", []))
 
         correlator = Correlator()
-        unified = correlator.merge(code_result, kali_result if kali_target else None, cve_entries)
-        unified.duration = time.time() - started
-        unified.repo_path = repo_path
-        unified.kali_target = kali_target
-        return unified
+        merged, code_only, kali_only = correlator.merge(
+            code_result, kali_result if kali_target else None, cve_entries
+        )
+
+        # Collect all CVE matches from merged findings
+        all_cve_matches = [cm for mf in merged for cm in (mf.cve_matches or [])]
+
+        return UnifiedScanResult(
+            scan_id=_make_scan_id(),
+            started_at=_format_timestamp(started),
+            duration=time.time() - started,
+            repo_path=repo_path,
+            kali_target=kali_target,
+            merged_findings=merged,
+            code_only_findings=code_only,
+            kali_only_findings=kali_only,
+            all_cve_matches=all_cve_matches,
+        )

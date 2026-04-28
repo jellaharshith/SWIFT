@@ -55,16 +55,11 @@ def test_agent_pool_returns_unified_scan_result():
         patch("agent.agent_pool.Correlator") as MockCorrelator,
     ):
         MockRunner.return_value.run_scan.return_value = {"tools": []}
-        mock_result = MagicMock(spec=UnifiedScanResult)
-        mock_result.merged_findings = []
-        mock_result.code_only_findings = []
-        mock_result.kali_only_findings = []
-        mock_result.all_cve_matches = []
-        mock_result.exploit_chains = []
-        mock_result.patches = []
-        mock_result.started_at = "2026-04-27T00:00:00Z"
-        MockCorrelator.return_value.merge.return_value = mock_result
+        # merge returns (merged, code_only, kali_only) tuple
+        MockCorrelator.return_value.merge.return_value = ([], [], [])
 
         pool = AgentPool()
         result = asyncio.run(pool.run_all("/tmp/repo", "example.com", lambda msg: None))
-    assert result is mock_result
+    assert isinstance(result, UnifiedScanResult)
+    assert result.repo_path == "/tmp/repo"
+    assert result.kali_target == "example.com"
