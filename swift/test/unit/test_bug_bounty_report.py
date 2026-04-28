@@ -110,3 +110,9 @@ def test_save_creates_file():
         assert "report-bounty-" in path
         content = open(path).read()
         assert "Steps to Reproduce" in content
+
+
+def test_format_contains_actively_exploited_badge():
+    result, paths = _make_result([_make_merged_finding(actively_exploited=True)])
+    output = BugBountyFormatter().format_markdown(result, paths)
+    assert "ACTIVELY EXPLOITED" in output
