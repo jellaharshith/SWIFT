@@ -1,6 +1,8 @@
 # 🚀 SWIFT — AI-Powered Vulnerability Discovery + Automated Patching
 
-**Continuous security scanning meets exploit chain detection meets automated patch generation.** SWIFT finds vulnerabilities in application code, connects them into attack paths, and generates tested fixes—all in minutes, not months.
+> **CLI-only tool.** SWIFT runs from your terminal, exactly like `claude-code`, `gh`, or `git`. There is no web UI, no dashboard, no hosted service. Everything ships as `python swift_cli.py <command>`.
+
+**Continuous security scanning meets exploit chain detection meets automated patch generation.** SWIFT finds vulnerabilities in application code, drives a real headless browser (Playwright) against live URLs, runs Docker-isolated privilege-escalation tests, and generates tested fixes — all in minutes, not months.
 
 ---
 
@@ -47,7 +49,24 @@ cd SWIFT/swift
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirement.txt
+python -m playwright install chromium     # browser binaries for web-scan
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+```
+
+> Docker daemon required for `validate`, `privesc`, `kali-scan`, and `attack-sim`.
+
+### Interactive Wizard (Recommended)
+
+```bash
+# Launch interactive wizard with menu-driven scanning
+python swift_cli.py wizard --repo /path/to/repo
+
+# Wizard selects agents automatically:
+# 1. CodeAgent    → Source code analysis (SQL injection, command injection, etc.)
+# 2. NetworkAgent → Network configuration vulnerabilities
+# 3. WebAgent     → Browser-based scanning (XSS, CSRF, insecure cookies)
+# 4. CVEAgent     → Known CVEs in dependencies
+# Outputs both JSON + Markdown reports
 ```
 
 ### Scan Your Code
@@ -78,7 +97,23 @@ python swift_cli.py scan --repo /path/to/repo --allow-patch-generation --output 
 
 ## 🖥️ CLI Reference
 
-### Code Analysis
+### Unified Scanner with AgentPool
+
+```bash
+# Interactive wizard (recommended) — automatically selects agents
+python swift_cli.py wizard --repo /path/to/repo
+
+# Run all agents at once (CodeAgent + NetworkAgent + WebAgent + CVEAgent)
+python swift_cli.py run-all --repo /path/to/repo --output json
+
+# Named agents for fine-grained control
+python swift_cli.py code-agent --repo /path/to/repo       # Source code analysis
+python swift_cli.py network-agent --repo /path/to/repo    # Network config scan
+python swift_cli.py web-agent --repo /path/to/repo        # Browser-based testing
+python swift_cli.py cve-agent --repo /path/to/repo        # Dependency CVE check
+```
+
+### Code Analysis (Legacy)
 
 ```bash
 # Scan for vulnerabilities
@@ -98,6 +133,23 @@ python swift_cli.py report --repo . --format json|markdown
 
 # Full pipeline: scan → patch → validate
 python swift_cli.py full --repo . --allow-patch-generation --allow-sandbox
+```
+
+### Browser Scanning (Playwright)
+
+`web-scan` drives a real headless Chromium against the target URL and probes for reflected XSS, error-based SQLi, open-redirects, mixed-content, and insecure cookies. Every navigation, probe, finding, and console error is appended to the step log.
+
+```bash
+python swift_cli.py web-scan --target https://target.example.com --yes
+python swift_cli.py web-scan --target https://target.example.com --headed --output-file web.json
+```
+
+### Docker Privilege Escalation Testing
+
+`privesc` mounts the target workspace read-only into a hardened, network-isolated container (`--cap-drop=ALL --security-opt no-new-privileges --network=none`) and runs probes for SUID/SGID, sudo NOPASSWD, world-writable PATH, dangerous capabilities, writable `/etc`, and cron weaknesses. The `--allow-privesc` zero-trust gate is required.
+
+```bash
+python swift_cli.py privesc --repo /path/to/workspace --allow-privesc --yes
 ```
 
 ### Offensive Security (Kali Linux)
@@ -121,13 +173,71 @@ SWIFT is **fail-closed by default** — write operations require explicit opt-in
 |------|-------------|
 | `--allow-patch-generation` | `patch`, `full` |
 | `--allow-sandbox` | `validate`, `full` |
+| `--allow-privesc` | `privesc` |
 | `--read-only` | Default; blocks mutations |
 | `--config <path>` | Fine-grained JSON config |
 | `--strict` | Strict validation mode |
 
+### Auto-Confirm (`--yes` / `-y`)
+
+Set `--yes` (or `SWIFT_AUTO_CONFIRM=1`) to skip every interactive prompt — including the offensive-scan consent banner. **`--yes` does NOT bypass the zero-trust `--allow-*` gates above**; you still pass those explicitly. Auto-confirm is one-shot per invocation; it is logged as `consent.auto_confirmed` in the step log.
+
+```bash
+SWIFT_AUTO_CONFIRM=1 python swift_cli.py full-scan --repo . --target https://app.example.com
+python swift_cli.py privesc --repo . --allow-privesc --yes
+```
+
+### Logging & Audit Trail
+
+Every step — CLI invocation, agent start/finish, Docker run, Playwright navigation, probe payload, patch apply, validation result — is appended to multiple sinks:
+
+| Sink | Path | Format |
+|------|------|--------|
+| Rolling step log | `swift/log/steps.log.jsonl` (rotates at 50 MB) | JSONL |
+| Process log | `swift/log/swift.log` | JSON |
+| Per-scan audit | `<repo>/.swift-artifacts/audit.log.jsonl` | JSONL |
+| Stdout | terminal | human |
+
+Override the rolling step log location with `--log-file PATH`. Tail it during a scan:
+
+```bash
+tail -f swift/log/steps.log.jsonl
+```
+
 ---
 
-## How It Works — The Pipeline
+## How It Works — AgentPool Architecture
+
+SWIFT uses a unified **AgentPool** with four specialized agents running in parallel:
+
+```
+Your Repo
+  │
+  ├─→ CodeAgent (source code analysis)
+  │   └─ SQL injection, command injection, hardcoded secrets, etc.
+  │
+  ├─→ NetworkAgent (network configuration)
+  │   └─ Open ports, insecure protocols, firewall misconfigurations
+  │
+  ├─→ WebAgent (browser-based testing)
+  │   └─ XSS, CSRF, insecure cookies, mixed content, open redirects
+  │
+  └─→ CVEAgent (known vulnerabilities)
+      └─ Dependency CVEs, outdated libraries, known exploits
+
+      ↓ Each agent runs independently ↓
+
+  ┌────────────┬────────────┬────────────┬────────────┐
+  │ Code Findings │ Network Issues │ Web Vulns  │ CVEs   │
+  └────────────┴────────────┴────────────┴────────────┘
+              ↓
+    UnifiedScanResult
+    (consolidated findings + risk scoring)
+              ↓
+    JSON | Markdown (dual output)
+```
+
+### Legacy Pipeline (CodeAgent Deep Dive)
 
 ```
 Your Code
@@ -422,7 +532,7 @@ json_out = JSONFormatter().format(result)
 
 ```
 swift/
-├── agent/              # Orchestration (scan_codebase, generate_patches)
+├── agent/              # AgentPool orchestration + named agents (CodeAgent, NetworkAgent, WebAgent, CVEAgent)
 ├── scanners/           # Haiku triage + Sonnet deep analysis
 ├── triage/             # Regex patterns, risk scoring, exploit graph
 ├── chains/             # Exploit chain detection
@@ -433,7 +543,8 @@ swift/
 ├── kali/               # Kali Linux offensive tools + MITRE ATT&CK
 ├── config/             # Settings + .env loading
 ├── log/                # Forensic audit logging
-├── cli/                # Click commands
+├── cli/                # Click commands (wizard, run-all, named agents)
+├── security/           # Permission enforcement, audit logging, safety monitor
 ├── test/               # 461+ tests
 ├── swift_cli.py        # Main CLI entry point
 └── main.py             # Legacy entry point
