@@ -5,6 +5,8 @@ import re
 import time
 from typing import Any, Optional, Set
 
+from agent.pentester_persona import build_haiku_pentester_prompt
+
 
 class HaikuTriageScanner:
     """Call Haiku to identify suspicious line numbers from pre-flagged code.
@@ -13,6 +15,8 @@ class HaikuTriageScanner:
         client: Anthropic client instance. Injected for testability.
         model: Haiku model ID (default: claude-haiku-4-5-20251001).
         max_retries: Number of retry attempts on API error (default: 3).
+        mode: Scan persona — "pentester" (default) uses offensive framing;
+            "passive" uses the original defensive reviewer framing.
     """
 
     MODEL = "claude-haiku-4-5-20251001"
@@ -22,10 +26,12 @@ class HaikuTriageScanner:
         client: Any,
         model: str = MODEL,
         max_retries: int = 3,
+        mode: str = "pentester",
     ) -> None:
         self._client = client
         self._model = model
         self._max_retries = max_retries
+        self._mode = mode
 
     def scan_lines(
         self, file_path: str, source_code: str, flagged_lines: Set[int]
@@ -57,6 +63,14 @@ class HaikuTriageScanner:
             ".py": "python", ".ts": "typescript", ".tsx": "typescript",
             ".js": "javascript", ".jsx": "javascript",
         }.get(ext, "code")
+        if self._mode != "passive":
+            return build_haiku_pentester_prompt(
+                file_path=file_path,
+                source_code=source_code,
+                flagged_lines=sorted(flagged_lines),
+                lang=lang,
+            )
+        # Passive / defensive mode — original prompt
         return (
             f"You are a security code reviewer analyzing {file_path}.\n"
             f"These lines were flagged by static analysis: {lines_str}\n\n"

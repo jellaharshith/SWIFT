@@ -50,6 +50,7 @@ def scan_codebase(
     repo_path: str,
     generate_patches_flag: bool = False,
     progress_callback: Optional[Callable[[dict], None]] = None,
+    mode: str = "pentester",
 ) -> ScanResult:
     """Run the full SWIFT scan pipeline on a local repository.
 
@@ -64,6 +65,8 @@ def scan_codebase(
         generate_patches_flag: If True, generate and sandbox-test patches after scan.
         progress_callback: Optional callback function to report progress. Called with dict of
             {stage, stage_name, files_total, files_scanned, current_file}.
+        mode: Scan persona — "pentester" (default) uses offensive red-team framing;
+            "passive" uses original defensive reviewer framing.
 
     Returns:
         ScanResult with confirmed vulnerabilities and optional patches.
@@ -75,9 +78,9 @@ def scan_codebase(
 
     client = anthropic.Anthropic(api_key=config.api_key)
     haiku = HaikuTriageScanner(
-        client, model=config.haiku_model, max_retries=config.max_retries
+        client, model=config.haiku_model, max_retries=config.max_retries, mode=mode
     )
-    sonnet = SonnetAnalysisScanner(client, model=config.sonnet_model)
+    sonnet = SonnetAnalysisScanner(client, model=config.sonnet_model, mode=mode)
     chain_detector = ExploitChainDetector(client, model=config.sonnet_model)
     chain_auditor = VulnerabilityChainAuditor()
 

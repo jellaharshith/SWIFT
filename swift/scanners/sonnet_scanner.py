@@ -7,6 +7,7 @@ import re
 from typing import Any, Optional
 
 from agent.models import Vulnerability
+from agent.pentester_persona import build_sonnet_pentester_prompt
 from log.logger import get_logger
 
 logger = get_logger()
@@ -123,9 +124,10 @@ class SonnetAnalysisScanner:
     REVIEW_THRESHOLD = 0.65
     _counter: itertools.count = itertools.count(1)
 
-    def __init__(self, client: Any, model: str = MODEL) -> None:
+    def __init__(self, client: Any, model: str = MODEL, mode: str = "pentester") -> None:
         self._client = client
         self._model = model
+        self._mode = mode
 
     def analyze_line(
         self, file_path: str, line_number: int, source_code: str
@@ -141,12 +143,20 @@ class SonnetAnalysisScanner:
             Vulnerability with status CONFIRMED/REVIEW_REQUIRED if confidence >= 0.65, else None.
         """
         language = self._detect_language(file_path)
-        prompt = _PROMPT_TEMPLATE.format(
-            file_path=file_path,
-            line_number=line_number,
-            source_code=source_code,
-            language=language,
-        )
+        if self._mode != "passive":
+            prompt = build_sonnet_pentester_prompt(
+                file_path=file_path,
+                line_number=line_number,
+                source_code=source_code,
+                language=language,
+            )
+        else:
+            prompt = _PROMPT_TEMPLATE.format(
+                file_path=file_path,
+                line_number=line_number,
+                source_code=source_code,
+                language=language,
+            )
         raw = self._call_api(prompt)
         return self._parse_response(raw, file_path, line_number)
 
