@@ -57,7 +57,6 @@ class HaikuTriageScanner:
         self, file_path: str, source_code: str, flagged_lines: Set[int]
     ) -> str:
         import os as _os
-        lines_str = ", ".join(str(n) for n in sorted(flagged_lines))
         ext = _os.path.splitext(file_path)[1].lower()
         lang = {
             ".py": "python", ".ts": "typescript", ".tsx": "typescript",
@@ -71,6 +70,7 @@ class HaikuTriageScanner:
                 lang=lang,
             )
         # Passive / defensive mode — original prompt
+        lines_str = ", ".join(str(n) for n in sorted(flagged_lines))
         return (
             f"You are a security code reviewer analyzing {file_path}.\n"
             f"These lines were flagged by static analysis: {lines_str}\n\n"
