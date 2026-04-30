@@ -7,8 +7,11 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass, field, asdict
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
+
+if TYPE_CHECKING:
+    from browser.smuggling_probe import SmugglingResult
 
 from browser.probes import (
     XSS_PAYLOADS,
@@ -23,6 +26,10 @@ from browser.probes import (
     AUTH_BYPASS_PATHS,
     PROTOTYPE_POLLUTION_PAYLOADS,
     CRLF_PAYLOADS,
+    XXE_PAYLOADS,
+    JWT_ATTACKS,
+    JWT_WEAK_SECRETS,
+    IDOR_PROBES,
 )
 from log.audit import log_step
 
@@ -48,11 +55,14 @@ class BrowserScanResult:
     findings: list[BrowserFinding] = field(default_factory=list)
     console_errors: list[str] = field(default_factory=list)
     network_requests: int = 0
+    smuggling: "SmugglingResult | None" = None
     insecure_cookies: list[str] = field(default_factory=list)
     mixed_content: list[str] = field(default_factory=list)
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
+        from dataclasses import asdict as _asdict
+        smuggling_dict = _asdict(self.smuggling) if self.smuggling is not None else None
         return {
             "target": self.target,
             "findings": [asdict(f) for f in self.findings],
@@ -61,6 +71,7 @@ class BrowserScanResult:
             "insecure_cookies": self.insecure_cookies,
             "mixed_content": self.mixed_content,
             "error": self.error,
+            "smuggling": smuggling_dict,
         }
 
 
@@ -73,13 +84,17 @@ def _inject_param(url: str, key: str, value: str) -> str:
 
 # ── Per-kind probe helpers ────────────────────────────────────────────────────
 
-async def _probe_xss(page, url: str, result: BrowserScanResult) -> None:
+async def _probe_xss(page, url: str, result: BrowserScanResult, deadline: float = 0.0) -> None:
     """Probe URL params with XSS payloads; detect DOM execution or reflection."""
     params = list(parse_qsl(urlparse(url).query, keep_blank_values=True))
     test_keys = [k for k, _ in params][:PER_PARAM_PAYLOAD_CAP] or ["q", "id", "search"]
 
     for key in test_keys:
+        if deadline and time.monotonic() > deadline:
+            return
         for payload in XSS_PAYLOADS:
+            if deadline and time.monotonic() > deadline:
+                return
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.xss", target=test_url, payload=payload)
             try:
@@ -389,6 +404,143 @@ async def _probe_crlf(page, url: str, result: BrowserScanResult) -> None:
                 log_step("browser.probe.error", url=test_url, err=str(exc), level="warning")
 
 
+# ── JWT probe ────────────────────────────────────────────────────────────────
+
+async def _probe_jwt(page, url: str, result: BrowserScanResult, deadline: float = 0.0) -> None:
+    """Probe for JWT alg:none vulnerability.
+
+    Injects an unsigned JWT (alg:none) via Authorization header and checks
+    whether the server accepts it, indicating improper signature verification.
+
+    Args:
+        page: Playwright Page object.
+        url: Target URL to probe.
+        result: BrowserScanResult accumulator.
+        deadline: Monotonic deadline; skip if exceeded.
+    """
+    if deadline and time.monotonic() > deadline:
+        return
+    log_step("browser.probe.jwt", target=url)
+    alg_none_token = JWT_ATTACKS["alg_none"]
+    try:
+        await page.set_extra_http_headers({"Authorization": f"Bearer {alg_none_token}"})
+        await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+        body = (await page.content()).lower()
+        if any(kw in body for kw in ("admin", "dashboard", "welcome", "profile", "account")):
+            result.findings.append(BrowserFinding(
+                kind="jwt_alg_none",
+                severity="high",
+                url=url,
+                evidence="Server accepted unsigned JWT (alg:none) — signature not verified",
+                payload=alg_none_token[:80],
+            ))
+        # Reset headers
+        await page.set_extra_http_headers({})
+    except Exception:  # noqa: BLE001
+        await page.set_extra_http_headers({})
+
+
+# ── IDOR probe ───────────────────────────────────────────────────────────────
+
+async def _probe_idor(page, url: str, result: BrowserScanResult, deadline: float = 0.0) -> None:
+    """Probe for Insecure Direct Object Reference via numeric ID enumeration.
+
+    Detects numeric URL params, fetches baseline, then probes adjacent IDs.
+    Significant response size difference with non-error content indicates IDOR.
+
+    Args:
+        page: Playwright Page object.
+        url: Target URL to probe.
+        result: BrowserScanResult accumulator.
+        deadline: Monotonic deadline; skip if exceeded.
+    """
+    if deadline and time.monotonic() > deadline:
+        return
+    log_step("browser.probe.idor", target=url)
+    params = parse_qsl(urlparse(url).query, keep_blank_values=True)
+    numeric_params = [(k, v) for k, v in params if v.isdigit()][:2]
+    if not numeric_params:
+        return
+
+    try:
+        await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+        baseline_content = await page.content()
+        baseline_len = len(baseline_content)
+    except Exception:  # noqa: BLE001
+        return
+
+    for key, val in numeric_params:
+        if deadline and time.monotonic() > deadline:
+            return
+        for variant_id in IDOR_PROBES(val):
+            if deadline and time.monotonic() > deadline:
+                return
+            variant_url = _inject_param(url, key, variant_id)
+            try:
+                await page.goto(variant_url, timeout=15000, wait_until="domcontentloaded")
+                variant_content = (await page.content()).lower()
+                variant_len = len(variant_content)
+                size_diff = abs(variant_len - baseline_len) / max(baseline_len, 1)
+                error_indicators = ("not found", "404", "forbidden", "403", "unauthorized", "401")
+                if size_diff > 0.10 and not any(ind in variant_content for ind in error_indicators):
+                    result.findings.append(BrowserFinding(
+                        kind="idor",
+                        severity="high",
+                        url=variant_url,
+                        evidence=f"param '{key}': baseline {baseline_len}B vs variant {variant_len}B ({size_diff:.0%} diff)",
+                        payload=variant_id,
+                    ))
+            except Exception:  # noqa: BLE001
+                continue
+
+
+# ── XXE probe ────────────────────────────────────────────────────────────────
+
+async def _probe_xxe(page, url: str, result: BrowserScanResult, deadline: float = 0.0) -> None:
+    """Probe for XML External Entity injection via fetch POST with XML payloads.
+
+    Sends XXE payloads via JavaScript fetch() to bypass Playwright's HTTP layer.
+    Detects file-read or SSRF via XXE by checking response for sensitive content.
+
+    Args:
+        page: Playwright Page object.
+        url: Target URL to probe.
+        result: BrowserScanResult accumulator.
+        deadline: Monotonic deadline; skip if exceeded.
+    """
+    if deadline and time.monotonic() > deadline:
+        return
+    log_step("browser.probe.xxe", target=url)
+    for payload in XXE_PAYLOADS[:2]:
+        if deadline and time.monotonic() > deadline:
+            return
+        escaped_payload = payload.replace("`", "\\`").replace("${", "\\${")
+        js = f"""
+        async () => {{
+            try {{
+                const r = await fetch("{url}", {{
+                    method: "POST",
+                    headers: {{"Content-Type": "application/xml"}},
+                    body: `{escaped_payload}`
+                }});
+                return await r.text();
+            }} catch(e) {{ return ""; }}
+        }}
+        """
+        try:
+            response_text = await page.evaluate(js)
+            if response_text and any(kw in response_text for kw in ("root:", "daemon:", "169.254", "localhost", "/etc/")):
+                result.findings.append(BrowserFinding(
+                    kind="xxe",
+                    severity="critical",
+                    url=url,
+                    evidence=f"XXE response leaked sensitive data: {response_text[:200]}",
+                    payload=payload[:100],
+                ))
+        except Exception:  # noqa: BLE001
+            continue
+
+
 # ── Main probe dispatcher ─────────────────────────────────────────────────────
 
 async def _probe(page, url: str, result: BrowserScanResult, mode: str = "pentester") -> None:
@@ -429,6 +581,9 @@ async def _probe(page, url: str, result: BrowserScanResult, mode: str = "pentest
         _probe_auth_bypass,
         _probe_prototype_pollution,
         _probe_crlf,
+        _probe_jwt,
+        _probe_idor,
+        _probe_xxe,
     ]
 
     for helper in helpers:
@@ -472,6 +627,14 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
 
             await context.close()
             await browser.close()
+
+        # Smuggling probe runs outside Playwright (raw TCP)
+        from browser.smuggling_probe import probe_smuggling
+        parsed = urlparse(target)
+        smug_host = parsed.hostname or target
+        smug_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        smug_path = parsed.path or "/"
+        result.smuggling = await probe_smuggling(smug_host, smug_port, smug_path)
     except Exception as exc:  # noqa: BLE001
         result.error = f"playwright runtime error: {exc}"
         log_step("browser.scan.error", target=target, err=str(exc), level="error")
