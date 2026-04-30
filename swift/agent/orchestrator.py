@@ -15,6 +15,7 @@ from agent.models import Patch, ScanResult, Vulnerability
 from agent.vuln_chain_auditor import VulnerabilityChainAuditor
 from chains.detector import ExploitChainDetector
 from config.settings import get_config
+from log.audit import log_step
 from log.logger import MetricsCollector, get_logger
 from output.chains import ChainsFormatter
 from patches.generator import PatchGenerator
@@ -84,6 +85,7 @@ def scan_codebase(
     chain_detector = ExploitChainDetector(client, model=config.sonnet_model)
     chain_auditor = VulnerabilityChainAuditor()
 
+    log_step("pentester.persona.activated", mode=mode, repo=str(repo_path))
     logger.info("Scan %s started on %s", scan_id, repo_path)
     start = time.monotonic()
 
