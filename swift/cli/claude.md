@@ -9,7 +9,7 @@ Provide command-line interface for scanning, patching, and validating.
 ### scan
 
 ```bash
-python main.py scan --repo <path> --output json|markdown --patches --confidence 95
+swiftsec scan --repo <path> --output json|markdown --patches --confidence 95
 ```
 
 **Options:**
@@ -22,14 +22,14 @@ python main.py scan --repo <path> --output json|markdown --patches --confidence 
 **Output:** JSON or Markdown with findings + patches
 
 ```bash
-python main.py scan --repo . --output json > results.json
-python main.py scan --repo https://github.com/user/project --patches
+swiftsec scan --repo . --output json > results.json
+swiftsec scan --repo https://github.com/user/project --patches
 ```
 
 ### patch
 
 ```bash
-python main.py patch --vuln-id SWIFT-001 --review|--apply --sandbox-test
+swiftsec patch --vuln-id SWIFT-001 --review|--apply --sandbox-test
 ```
 
 **Options:**
@@ -42,14 +42,14 @@ python main.py patch --vuln-id SWIFT-001 --review|--apply --sandbox-test
 **Output:** Unified diff + reasoning
 
 ```bash
-python main.py patch --vuln-id SWIFT-001 --review
-python main.py patch --vuln-id SWIFT-001 --apply --sandbox-test
+swiftsec patch --vuln-id SWIFT-001 --review
+swiftsec patch --vuln-id SWIFT-001 --apply --sandbox-test
 ```
 
 ### validate
 
 ```bash
-python main.py validate --patch-id PATCH-001 --verbose
+swiftsec validate --patch-id PATCH-001 --verbose
 ```
 
 **Options:**
@@ -162,11 +162,11 @@ Error: Sandbox test failed (exit 1)
 pytest test/unit/test_cli.py::test_scan_command -v
 
 # Integration test
-python main.py scan --repo ./test-repo --output json | jq '.summary'
+swiftsec scan --repo ./test-repo --output json | jq '.summary'
 ```
 
 ---
 
 **Location:** `swift/cli/claude.md`  
 **Depends on:** agent, patches, output, config  
-**Is depended on by:** main.py
+**Is depended on by:** swift_cli.py
