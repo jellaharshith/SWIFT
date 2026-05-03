@@ -5,10 +5,13 @@ import argparse
 import asyncio
 import json
 import sys
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from cli.banner import print_banner, should_show_banner
+from swift import __version__
 from output.formatters import JSONFormatter, MarkdownFormatter
 from patch_validator import validate_patch
 from sandbox_runner import run_in_sandbox
@@ -16,6 +19,8 @@ from agent.agent_pool import AgentPool
 from analysis.privesc import PrivilegeEscalationAnalyzer
 from output.bug_bounty_report import BugBountyFormatter
 from output.pentest_report import PentestFormatter
+from log.audit import log_step, set_step_log_path
+from config.auto_confirm import is_auto_confirmed
 
 
 def _utc_now() -> str:
@@ -28,9 +33,13 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _append_audit(audit_log: Path, payload: dict[str, Any]) -> None:
+    """Back-compat wrapper. New code should call log_step()."""
     audit_log.parent.mkdir(parents=True, exist_ok=True)
     with audit_log.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
+    step = payload.get("action") or payload.get("step") or "audit"
+    fields = {k: v for k, v in payload.items() if k not in {"action", "timestamp"}}
+    log_step(f"audit.{step}", **fields)
 
 
 def _artifact_paths(repo: Path) -> tuple[Path, Path]:
@@ -207,7 +216,7 @@ def run_full_scan(args: argparse.Namespace) -> dict[str, Any]:
     if not getattr(args, "repo", None) and not getattr(args, "target", None):
         _fail_closed("full-scan requires --repo and/or --target.")
 
-    require_consent()
+    require_consent(args)
 
     repo = str(Path(args.repo).resolve()) if args.repo else None
     artifacts_dir = (Path(args.repo).resolve() / ".swift-artifacts") if args.repo else Path(".swift-artifacts")
@@ -429,12 +438,6 @@ def _add_shared_flags(p: argparse.ArgumentParser, include_output: bool = True) -
     p.add_argument("--strict", action="store_true")
 
 
-_WIZARD_BANNER = """
-╔══════════════════════════════════════════╗
-║   SWIFT Security Scanner                 ║
-║   Powered by live CVEs + MITRE ATT&CK   ║
-╚══════════════════════════════════════════╝
-"""
 
 _WIZARD_MENU = """What do you want to scan?
 
@@ -449,7 +452,6 @@ def run_wizard(_args: Any) -> None:
     """Interactive plain-English wizard for target selection and scanning."""
     from config.consent import require_consent
 
-    print(_WIZARD_BANNER)
     print(_WIZARD_MENU)
 
     choice_str = input("Enter choice [1-4]: ").strip()
@@ -466,7 +468,7 @@ def run_wizard(_args: Any) -> None:
     if choice in (2, 3, 4):
         label = "URL" if choice == 2 else "Domain"
         kali_target = input(f"Enter {label} to scan: ").strip()
-        require_consent()
+        require_consent(args)
 
     artifacts_dir = Path(".swift-artifacts")
     artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -494,9 +496,18 @@ def run_wizard(_args: Any) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="swift",
-        description="SWIFT — CLI-only security scanner with Kali Linux offensive capabilities",
+        prog="swiftsec",
+        description="SWIFT — AI-powered vulnerability scanner (Kali + Playwright + Docker privesc)",
     )
+    parser.add_argument("--version", action="version", version=f"swiftsec {__version__}")
+    parser.add_argument("--yes", "-y", action="store_true",
+                        help="Auto-confirm all interactive prompts (also: SWIFT_AUTO_CONFIRM=1)")
+    parser.add_argument("--no-banner", action="store_true",
+                        help="Suppress startup banner")
+    parser.add_argument("--quiet", "-q", action="store_true",
+                        help="Minimal output (also suppresses banner)")
+    parser.add_argument("--log-file", default=None,
+                        help="Override step log file path (default: swift/log/steps.log.jsonl)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     # ── Code analysis commands ─────────────────────────────────────────────
@@ -563,17 +574,94 @@ def build_parser() -> argparse.ArgumentParser:
         help="Interactive scanner wizard — choose codebase, URL, or domain in plain English",
     )
 
+    web = sub.add_parser("web-scan", help="Playwright-driven live web vulnerability scan")
+    web.add_argument("--target", required=True, help="HTTP(S) URL to scan")
+    web.add_argument("--headed", action="store_true", help="Show browser (default: headless)")
+    web.add_argument("--output-file", default=None, help="JSON report path")
+
+    pe = sub.add_parser("privesc", help="Docker-based privilege escalation tester")
+    pe.add_argument("--repo", required=True, help="Workspace path to mount into container")
+    pe.add_argument("--allow-privesc", action="store_true",
+                    help="Required gate: enables SYS_PTRACE cap inside disposable container")
+    pe.add_argument("--image", default="ubuntu:22.04")
+    pe.add_argument("--timeout", type=int, default=120)
+    pe.add_argument("--output-file", default=None)
+
     return parser
 
 
+def run_web_scan(args: argparse.Namespace) -> dict[str, Any]:
+    from browser.playwright_runner import scan_url
+    from config.consent import require_consent
+
+    require_consent(args)
+    log_step("cli.web_scan.start", target=args.target, headed=args.headed)
+    result = scan_url(args.target, headless=not args.headed)
+    out = Path(args.output_file) if args.output_file else Path(f"web-scan-{uuid_safe(args.target)}.json")
+    out.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
+    log_step("cli.web_scan.finish", target=args.target, findings=len(result.findings), artifact=str(out))
+    return {
+        "status": "ok",
+        "target": args.target,
+        "findings": len(result.findings),
+        "artifact": str(out),
+        "error": result.error,
+    }
+
+
+def run_privesc(args: argparse.Namespace) -> dict[str, Any]:
+    from sandbox.privesc_runner import run_privesc_scan
+
+    if not args.allow_privesc:
+        _fail_closed("privesc requires --allow-privesc.")
+
+    repo = Path(args.repo).resolve()
+    artifacts_dir, _ = _artifact_paths(repo)
+    log_step("cli.privesc.start", repo=str(repo), image=args.image)
+    result = run_privesc_scan(
+        repo_path=str(repo),
+        artifacts_root=str(artifacts_dir / "privesc"),
+        image=args.image,
+        timeout=args.timeout,
+        allow_ptrace=True,
+    )
+    out = Path(args.output_file) if args.output_file else (artifacts_dir / "privesc" / "result.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
+    log_step("cli.privesc.finish", repo=str(repo), findings=len(result.findings), artifact=str(out))
+    return {
+        "status": "ok" if result.success else "failed",
+        "container_id": result.container_id,
+        "findings": len(result.findings),
+        "artifact": str(out),
+        "errors": result.errors,
+    }
+
+
+def uuid_safe(s: str) -> str:
+    return "".join(c if c.isalnum() else "_" for c in s)[:48]
+
+
 def main() -> None:
+    from log.logger import get_logger
+    logger = get_logger("swift.cli")
+
     parser = build_parser()
     args = parser.parse_args()
+
+    if should_show_banner(args, sys.argv):
+        print_banner()
+
+    if getattr(args, "log_file", None):
+        set_step_log_path(args.log_file)
+
+    log_step("cli.invoke", command=args.command, auto_confirmed=is_auto_confirmed(args))
 
     if hasattr(args, "config"):
         _load_config(args.config)
 
-    if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan", "wizard"}:
+    if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan",
+                             "wizard", "web-scan", "privesc"}:
         _ensure_zero_trust(args)
 
     handlers = {
@@ -588,10 +676,29 @@ def main() -> None:
         "live-feed": run_live_feed,
         "attack-sim": run_attack_sim,
         "wizard": run_wizard,
+        "web-scan": run_web_scan,
+        "privesc": run_privesc,
     }
-    payload = handlers[args.command](args)
-    if args.command not in {"live-feed", "wizard"}:
-        print(json.dumps(payload, indent=2, sort_keys=True))
+    try:
+        payload = handlers[args.command](args)
+        log_step("cli.complete", command=args.command)
+        if args.command not in {"live-feed", "wizard"}:
+            print(json.dumps(payload, indent=2, sort_keys=True))
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        sys.exit(130)
+    except SystemExit:
+        raise
+    except (FileNotFoundError, PermissionError) as e:
+        log_step("cli.error", error=str(e))
+        print(f"swiftsec: {e}", file=sys.stderr)
+        sys.exit(2)
+    except Exception as e:
+        tb = traceback.format_exc()
+        log_step("cli.fatal", error=str(e))
+        logger.exception("fatal error")
+        print(f"swiftsec: unexpected error: {e}\n  see log/swift.log for details", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
