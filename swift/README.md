@@ -1,115 +1,126 @@
 # SWIFT — AI-Powered Vulnerability Scanner
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)
-![Claude AI](https://img.shields.io/badge/Claude-Haiku%20%2B%20Sonnet-blueviolet?logo=anthropic)
-![License](https://img.shields.io/badge/License-MIT-green)
-![Confidence](https://img.shields.io/badge/Confidence%20Gate-95%25-critical)
+> Finds, verifies, and fixes security vulnerabilities automatically. Continuous, AI-powered, built for CI/CD.
 
-> Continuous, AI-powered security scanning. Finds, verifies, and fixes vulnerabilities automatically — with a 95% confidence gate that eliminates false positives.
+[![CI](https://github.com/jellaharshith/SWIFT/actions/workflows/ci.yml/badge.svg)](https://github.com/jellaharshith/SWIFT/actions/workflows/ci.yml)
+[![PyPI version](https://badge.fury.io/py/swiftsec.svg)](https://pypi.org/project/swiftsec/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
+```
+███████╗██╗    ██╗██╗███████╗████████╗
+██╔════╝██║    ██║██║██╔════╝╚══██╔══╝
+███████╗██║ █╗ ██║██║█████╗     ██║
+╚════██║██║███╗██║██║██╔══╝     ██║
+███████║╚███╔███╔╝██║██║        ██║
+╚══════╝ ╚══╝╚══╝ ╚═╝╚═╝        ╚═╝
 
-## What SWIFT Does
-
-| Stage | Model | What Happens |
-|-------|-------|--------------|
-| Regex Triage | None (free) | Fast pattern matching flags suspicious files |
-| Haiku Filter | Claude Haiku | Broad AI filter at ~50ms/file, $0.05/file |
-| Sonnet Analysis | Claude Sonnet | Deep reasoning — only reports findings ≥ 95% confidence |
-| Patch + Sandbox | Claude Sonnet + Docker | 3 patch candidates generated, tested in isolation, best returned |
-
-Supports **Python, TypeScript, and JavaScript** codebases. Scans local paths or GitHub URLs directly.
-
----
-
-## Features
-
-- **Zero false positives** — 95% confidence threshold is non-negotiable; low-confidence findings go to logs, never output
-- **GitHub integration** — scan public or private repos by URL, no manual cloning
-- **Docker sandbox** — patches tested in complete isolation (no network, read-only FS, 30s timeout)
-- **Web dashboard** — real-time scan progress, vulnerability viewer, report download
-- **REST API** — JSON endpoints for CI/CD and programmatic access
-- **GitHub OAuth** — authenticate to scan private repositories
-- **Scan history** — browse past scans, filter by severity, export reports
-- **Cost-efficient** — target <$2 per full scan via progressive filtering
-
----
-
-## Installation
-
-**Prerequisites:** Python 3.10+, Docker, Anthropic API key
-
-```bash
-git clone https://github.com/jellaharshith/SWIFT.git
-cd SWIFT/swift
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirement.txt
-cp .env.example .env   # Add ANTHROPIC_API_KEY
+  AI-Powered Vulnerability Scanner
+  v2.0.0 · mode: production
 ```
 
----
+## What SWIFT does
 
-## Quick Start
+| Step | Model | Result |
+|------|-------|--------|
+| **Triage** | Claude Haiku | Flags suspicious patterns (~50ms/file) |
+| **Analysis** | Claude Sonnet | Confirms real vulnerabilities (≥95% confidence only) |
+| **Patching** | Claude Sonnet + Docker | Generates and tests fixes in isolation |
+| **Reporting** | Markdown / JSON / SARIF | Human + machine-readable output |
+
+## Quick start
 
 ```bash
-# Scan local repo
-python main.py scan --repo . --output markdown
+pip install swiftsec
+export ANTHROPIC_API_KEY=sk-ant-...
 
-# Scan GitHub repo + generate patches
-python main.py patch --repo https://github.com/owner/repo --output json
+# Scan a local repo
+swiftsec scan ./my-project
 
-# Launch web dashboard
-uvicorn web.app:app --reload --port 8000
-# → http://localhost:8000/dashboard
+# Scan a GitHub repo
+swiftsec scan https://github.com/org/repo
+
+# Full pipeline: scan → patch → validate
+swiftsec full ./my-project --allow-patch-generation --allow-sandbox
+
+# Offensive Kali scan
+swiftsec kali-scan --target 10.0.0.1 --tools nmap,nikto,nuclei
+
+# Interactive wizard
+swiftsec wizard
 ```
 
----
+## Docker
 
-## REST API
+```bash
+docker pull ghcr.io/jellaharshith/swift:latest
+docker run --rm \
+  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
+  -v $(pwd):/home/swift/work \
+  ghcr.io/jellaharshith/swift scan .
+```
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Health check |
-| `/scans` | GET | List past scans (paginated) |
-| `/scan` | POST | Submit new scan (async) |
-| `/scan/{id}/status` | GET | Poll scan status |
-| `/scan/{id}/report/json` | GET | Download JSON report |
-| `/scan/{id}/report/markdown` | GET | Download Markdown report |
-| `/metrics` | GET | Aggregate cost, speed, and vuln metrics |
-| `/auth/github` | GET | GitHub OAuth redirect |
-| `/auth/callback` | GET | GitHub OAuth callback |
+## Commands
 
----
+| Command | Description |
+|---------|-------------|
+| `scan` | Static vulnerability scan (local path or GitHub URL) |
+| `triage` | Fast pattern-matching triage only |
+| `patch` | Generate patches for found vulnerabilities |
+| `validate` | Test patches in Docker sandbox |
+| `full` | Scan → patch → validate pipeline |
+| `full-scan` | Code + Kali + CVE scan simultaneously |
+| `kali-scan` | Kali Linux tools against live target |
+| `web-scan` | Playwright-driven web vulnerability scan |
+| `attack-sim` | MITRE ATT&CK-mapped exploit simulation |
+| `live-feed` | Stream live CVEs from NVD + CISA KEV |
+| `wizard` | Interactive scanner wizard |
+| `privesc` | Docker-based privilege escalation tester |
 
 ## Configuration
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | **Yes** | — | Anthropic API key |
-| `SWIFT_CONFIDENCE_THRESHOLD` | No | `0.95` | Minimum confidence to report — never lower |
-| `SWIFT_LOG_LEVEL` | No | `INFO` | `DEBUG` / `INFO` / `WARNING` |
-| `SWIFT_DB_PATH` | No | `./swift.db` | SQLite scan history path |
-| `GITHUB_CLIENT_ID` | No | — | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | No | — | GitHub OAuth app client secret |
-
----
-
-## CI/CD Integration
-
-Add SWIFT to any GitHub Actions workflow via the REST API or CLI. See [CI/CD Integration Guide](docs/cicd.md) for a ready-to-use workflow template.
-
----
-
-## Testing
-
 ```bash
-pytest test/unit/ -v                      # Unit tests (no API key needed)
-pytest test/integration/ -v              # Integration tests
-pytest test/ --cov=. --cov-report=term   # Full coverage report
+cp .env.example .env
+# Set ANTHROPIC_API_KEY=sk-ant-...
 ```
 
----
+## CI/CD integration
+
+```yaml
+- name: SWIFT security scan
+  run: swiftsec scan . --output json > swift-report.json
+  env:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    SWIFT_NO_BANNER: "1"
+```
+
+## Output is pipe-safe
+
+Banner always goes to stderr. JSON to stdout. Safe to pipe:
+
+```bash
+swiftsec scan ./repo | jq '.findings[] | select(.severity == "HIGH")'
+```
+
+## Safety guarantees
+
+- No network in sandbox (`--network=none`)
+- Read-only filesystem except `/tmp`
+- 2-core / 2 GB / 30-second hard limit
+- **Only reports findings with confidence ≥ 95%**
+
+## Docs
+
+Full architecture and module reference: [`docs/README.md`](docs/README.md)
+
+## Contributing
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) · Run tests: `pytest test/ -v --cov`
+
+## Security
+
+[`SECURITY.md`](SECURITY.md)
 
 ## License
 
-MIT
+MIT — [`LICENSE`](LICENSE)
