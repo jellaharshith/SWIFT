@@ -1,6 +1,8 @@
 # 🚀 SWIFT — AI-Powered Vulnerability Discovery + Automated Patching
 
-**Continuous security scanning meets exploit chain detection meets automated patch generation.** SWIFT finds vulnerabilities in application code, connects them into attack paths, and generates tested fixes—all in minutes, not months.
+> **CLI-only tool.** SWIFT runs from your terminal, exactly like `claude`, `gh`, or `git`. There is no web UI, no dashboard, no hosted service. Install once, then type `swiftsec` from anywhere.
+
+**Continuous security scanning meets exploit chain detection meets automated patch generation.** SWIFT finds vulnerabilities in application code, drives a real headless browser (Playwright) against live URLs, runs Docker-isolated privilege-escalation tests, and generates tested fixes — all in minutes, not months.
 
 ---
 
@@ -42,29 +44,50 @@ SWIFT runs continuously, finding vulnerabilities in minutes and reporting only w
 ### Install
 
 ```bash
-git clone https://github.com/jellaharshith/SWIFT.git
-cd SWIFT/swift
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirement.txt
+# Install globally (recommended)
+pipx install git+https://github.com/jellaharshith/SWIFT.git#subdirectory=swift
+swiftsec --help    # verify install
+
+# First-time setup
+python -m playwright install chromium     # browser binaries for web-scan
 echo "ANTHROPIC_API_KEY=sk-ant-..." > .env
+
+# Or clone and install locally
+git clone https://github.com/jellaharshith/SWIFT.git
+pipx install ./SWIFT/swift
+```
+
+> Docker daemon required for `validate`, `privesc`, `kali-scan`, and `attack-sim`.
+
+### Interactive Wizard (Recommended)
+
+```bash
+# Launch interactive wizard with menu-driven scanning
+swiftsec wizard --repo /path/to/repo
+
+# Wizard selects agents automatically:
+# 1. CodeAgent    → Source code analysis (SQL injection, command injection, etc.)
+# 2. NetworkAgent → Network configuration vulnerabilities
+# 3. WebAgent     → Browser-based scanning (XSS, CSRF, insecure cookies)
+# 4. CVEAgent     → Known CVEs in dependencies
+# Outputs both JSON + Markdown reports
 ```
 
 ### Scan Your Code
 
 ```bash
 # JSON output (APIs, dashboards)
-python main.py scan --repo /path/to/repo --output json
+swiftsec scan --repo /path/to/repo --output json
 
 # Markdown report (email, PR comments)
-python main.py scan --repo /path/to/repo --output markdown
+swiftsec scan --repo /path/to/repo --output markdown
 
 # SARIF (GitHub Code Scanning)
-python main.py scan --repo /path/to/repo --output sarif > results.sarif
+swiftsec scan --repo /path/to/repo --output sarif > results.sarif
 gh code-scanning upload results.sarif
 
 # With patch generation
-python main.py scan --repo /path/to/repo --output json --patches
+swiftsec scan --repo /path/to/repo --allow-patch-generation --output json
 ```
 
 #### Example Output
@@ -76,7 +99,149 @@ python main.py scan --repo /path/to/repo --output json --patches
 
 ---
 
-## How It Works — The Pipeline
+## 🖥️ CLI Reference
+
+### Unified Scanner with AgentPool
+
+```bash
+# Interactive wizard (recommended) — automatically selects agents
+swiftsec wizard --repo /path/to/repo
+
+# Run all agents at once (CodeAgent + NetworkAgent + WebAgent + CVEAgent)
+swiftsec run-all --repo /path/to/repo --output json
+
+# Named agents for fine-grained control
+swiftsec code-agent --repo /path/to/repo       # Source code analysis
+swiftsec network-agent --repo /path/to/repo    # Network config scan
+swiftsec web-agent --repo /path/to/repo        # Browser-based testing
+swiftsec cve-agent --repo /path/to/repo        # Dependency CVE check
+```
+
+### Code Analysis (Legacy)
+
+```bash
+# Scan for vulnerabilities
+swiftsec scan --repo . --output json|markdown
+
+# Fast triage only (alias)
+swiftsec triage --repo .
+
+# Generate patches (requires flag)
+swiftsec patch --repo . --allow-patch-generation
+
+# Validate a patch in Docker sandbox (requires flag)
+swiftsec validate --repo . --patch-file patch.diff --target-file file.py --allow-sandbox
+
+# Generate report from previous scan
+swiftsec report --repo . --format json|markdown
+
+# Full pipeline: scan → patch → validate
+swiftsec full --repo . --allow-patch-generation --allow-sandbox
+```
+
+### Browser Scanning (Playwright)
+
+`web-scan` drives a real headless Chromium against the target URL and probes for reflected XSS, error-based SQLi, open-redirects, mixed-content, and insecure cookies. Every navigation, probe, finding, and console error is appended to the step log.
+
+```bash
+swiftsec web-scan --target https://target.example.com --yes
+swiftsec web-scan --target https://target.example.com --headed --output-file web.json
+```
+
+### Docker Privilege Escalation Testing
+
+`privesc` mounts the target workspace read-only into a hardened, network-isolated container (`--cap-drop=ALL --security-opt no-new-privileges --network=none`) and runs probes for SUID/SGID, sudo NOPASSWD, world-writable PATH, dangerous capabilities, writable `/etc`, and cron weaknesses. The `--allow-privesc` zero-trust gate is required.
+
+```bash
+swiftsec privesc --repo /path/to/workspace --allow-privesc --yes
+```
+
+### Offensive Security (Kali Linux)
+
+```bash
+# Run Kali tools against a live target
+swiftsec kali-scan --target <IP|hostname|URL> --tools all --live-cve --output-file results.json
+
+# Stream live CVEs from NVD + CISA KEV (every 2s)
+swiftsec live-feed --severity CRITICAL --output stream
+
+# MITRE ATT&CK-mapped simulation
+swiftsec attack-sim --target <IP> --technique T1046
+```
+
+### Zero-Trust Security Flags
+
+SWIFT is **fail-closed by default** — write operations require explicit opt-in:
+
+| Flag | Required for |
+|------|-------------|
+| `--allow-patch-generation` | `patch`, `full` |
+| `--allow-sandbox` | `validate`, `full` |
+| `--allow-privesc` | `privesc` |
+| `--read-only` | Default; blocks mutations |
+| `--config <path>` | Fine-grained JSON config |
+| `--strict` | Strict validation mode |
+
+### Auto-Confirm (`--yes` / `-y`)
+
+Set `--yes` (or `SWIFT_AUTO_CONFIRM=1`) to skip every interactive prompt — including the offensive-scan consent banner. **`--yes` does NOT bypass the zero-trust `--allow-*` gates above**; you still pass those explicitly. Auto-confirm is one-shot per invocation; it is logged as `consent.auto_confirmed` in the step log.
+
+```bash
+SWIFT_AUTO_CONFIRM=1 swiftsec full-scan --repo . --target https://app.example.com
+swiftsec privesc --repo . --allow-privesc --yes
+```
+
+### Logging & Audit Trail
+
+Every step — CLI invocation, agent start/finish, Docker run, Playwright navigation, probe payload, patch apply, validation result — is appended to multiple sinks:
+
+| Sink | Path | Format |
+|------|------|--------|
+| Rolling step log | `swift/log/steps.log.jsonl` (rotates at 50 MB) | JSONL |
+| Process log | `swift/log/swift.log` | JSON |
+| Per-scan audit | `<repo>/.swift-artifacts/audit.log.jsonl` | JSONL |
+| Stdout | terminal | human |
+
+Override the rolling step log location with `--log-file PATH`. Tail it during a scan:
+
+```bash
+tail -f swift/log/steps.log.jsonl
+```
+
+---
+
+## How It Works — AgentPool Architecture
+
+SWIFT uses a unified **AgentPool** with four specialized agents running in parallel:
+
+```
+Your Repo
+  │
+  ├─→ CodeAgent (source code analysis)
+  │   └─ SQL injection, command injection, hardcoded secrets, etc.
+  │
+  ├─→ NetworkAgent (network configuration)
+  │   └─ Open ports, insecure protocols, firewall misconfigurations
+  │
+  ├─→ WebAgent (browser-based testing)
+  │   └─ XSS, CSRF, insecure cookies, mixed content, open redirects
+  │
+  └─→ CVEAgent (known vulnerabilities)
+      └─ Dependency CVEs, outdated libraries, known exploits
+
+      ↓ Each agent runs independently ↓
+
+  ┌────────────┬────────────┬────────────┬────────────┐
+  │ Code Findings │ Network Issues │ Web Vulns  │ CVEs   │
+  └────────────┴────────────┴────────────┴────────────┘
+              ↓
+    UnifiedScanResult
+    (consolidated findings + risk scoring)
+              ↓
+    JSON | Markdown (dual output)
+```
+
+### Legacy Pipeline (CodeAgent Deep Dive)
 
 ```
 Your Code
@@ -217,14 +382,52 @@ cursor.execute(query, (user_id,))
 
 ---
 
+## 🗡️ Offensive Security (Kali Linux)
+
+Run industry-standard offensive tools against live targets in an isolated Kali Linux container:
+
+| Tool | Purpose |
+|------|---------|
+| nmap / masscan | Port + service discovery |
+| nikto | Web server vulnerability scan |
+| sqlmap | Automated SQL injection |
+| nuclei | Template-based CVE detection |
+| hydra | Credential brute-force |
+| gobuster | Directory/DNS enumeration |
+| searchsploit | Exploit-DB search |
+
+All tools map findings to **MITRE ATT&CK techniques** and correlate against the live CVE feed.
+
+```bash
+swiftsec kali-scan --target 192.168.1.10 --tools nmap,sqlmap,nikto --live-cve
+```
+
+---
+
+## 📡 Live CVE Feed
+
+Streams real-time CVE data from **NVD** and **CISA KEV** every 2 seconds:
+
+```bash
+# Stream critical CVEs to terminal
+swiftsec live-feed --severity CRITICAL --output stream
+
+# Export to JSON
+swiftsec live-feed --severity HIGH --output json --interval 5
+```
+
+SWIFT automatically cross-references live CVEs against findings in your scan results.
+
+---
+
 ## 🧪 Test Coverage
 
-**338 tests, 97% coverage**
+**461+ tests, 97% coverage**
 
 | Suite | Tests | Status |
 |---|---|---|
-| Unit | 288 | ✅ Pass |
-| Integration | 49 | ✅ Pass |
+| Unit | 400+ | ✅ Pass |
+| Integration | 54 | ✅ Pass |
 | E2E | 7 | ⏭️ Gate `SWIFT_RUN_E2E=1` |
 
 **Phase-by-phase:**
@@ -292,7 +495,7 @@ jobs:
 ### SARIF Upload
 
 ```bash
-python main.py scan --repo /path/to/repo --output sarif > results.sarif
+swiftsec scan --repo /path/to/repo --output sarif > results.sarif
 gh code-scanning upload results.sarif
 ```
 
@@ -333,18 +536,21 @@ json_out = JSONFormatter().format(result)
 
 ```
 swift/
-├── agent/              # Orchestration
-├── scanners/           # Haiku + Sonnet AI
-├── triage/             # Regex patterns + risk scoring
+├── agent/              # AgentPool orchestration + named agents (CodeAgent, NetworkAgent, WebAgent, CVEAgent)
+├── scanners/           # Haiku triage + Sonnet deep analysis
+├── triage/             # Regex patterns, risk scoring, exploit graph
 ├── chains/             # Exploit chain detection
-├── patches/            # Patch generation + testing
-├── sandbox/            # Docker isolation
+├── patches/            # Patch generation + scoring
+├── sandbox/            # Docker isolation + testing
 ├── output/             # JSON, Markdown, SARIF formatters
-├── config/             # Settings
-├── log/                # Audit logging
-├── cli/                # Click commands
-├── test/               # 338 tests
-└── main.py             # Entry point
+├── feeds/              # Live CVE feed (NVD + CISA KEV)
+├── kali/               # Kali Linux offensive tools + MITRE ATT&CK
+├── config/             # Settings + .env loading
+├── log/                # Forensic audit logging
+├── cli/                # Click commands (wizard, run-all, named agents)
+├── security/           # Permission enforcement, audit logging, safety monitor
+├── test/               # 461+ tests
+└── swift_cli.py        # Main CLI entry point (swiftsec console script)
 ```
 
 ---

@@ -4,9 +4,38 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+
+_SECRET_PATTERNS = [
+    re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
+    re.compile(r"Bearer\s+[A-Za-z0-9._\-]+"),
+    re.compile(r"(?i)(api[_\-]?key|token|password|secret)[\"'\s:=]+[\"']?([A-Za-z0-9_\-]{16,})"),
+]
+_REDACTED = "***REDACTED***"
+
+
+def _redact(text: str) -> str:
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub(_REDACTED, text)
+    for env_key in ("ANTHROPIC_API_KEY", "GITHUB_TOKEN", "OPENAI_API_KEY"):
+        val = os.environ.get(env_key, "")
+        if val and len(val) > 8 and val in text:
+            text = text.replace(val, _REDACTED)
+    return text
+
+
+class _SecretRedactingFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = _redact(str(record.msg))
+        if record.args:
+            if isinstance(record.args, dict):
+                record.args = {k: _redact(str(v)) for k, v in record.args.items()}
+            elif isinstance(record.args, tuple):
+                record.args = tuple(_redact(str(a)) for a in record.args)
+        return True
 
 
 class _JSONFormatter(logging.Formatter):
@@ -83,6 +112,10 @@ def get_logger(name: str = "swift") -> logging.Logger:
     file_handler = logging.FileHandler(log_path)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(_JSONFormatter())
+
+    redact_filter = _SecretRedactingFilter()
+    stream_handler.addFilter(redact_filter)
+    file_handler.addFilter(redact_filter)
 
     logger.addHandler(stream_handler)
     logger.addHandler(file_handler)

@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional
+
+if TYPE_CHECKING:
+    from feeds.live_cve import CVEMatch
 
 
 @dataclass
@@ -140,3 +143,95 @@ class TestResult:
     @property
     def summary(self) -> str:
         return "PASSED" if self.passed else "FAILED"
+
+
+@dataclass
+class MergedFinding:
+    """Unified vulnerability finding across multiple sources (code, Kali, CVE).
+
+    Represents a vulnerability detected by one or more scanning sources,
+    with consolidated severity, sources, and cross-referenced evidence.
+
+    Attributes:
+        id: Unique identifier for merged finding (e.g., "MERGED-{hex8}")
+        vuln_type: Type of vulnerability (e.g., "sql_injection")
+        severity: Max severity across sources (CRITICAL, HIGH, MEDIUM, LOW)
+        sources: List of detection sources (e.g., ["code", "kali", "cve"])
+        code_finding: Original Vulnerability from code analysis (if any)
+        kali_finding: Finding object from Kali scanning (if any)
+        cve_matches: List of CVEMatch objects correlated with this finding
+        actively_exploited: Whether CVE is actively exploited in the wild
+        correlation_confidence: Confidence score for source correlation (0.0-1.0)
+        mitre_techniques: MITRE ATT&CK techniques from Kali findings (list of dicts)
+    """
+    id: str
+    vuln_type: str
+    severity: str
+    sources: List[str]
+    code_finding: Optional[Vulnerability] = None
+    kali_finding: Optional[dict] = None
+    cve_matches: List["CVEMatch"] = field(default_factory=list)
+    actively_exploited: bool = False
+    correlation_confidence: float = 0.0
+    mitre_techniques: List[dict] = field(default_factory=list)
+
+
+@dataclass
+class UnifiedScanResult:
+    """Complete scan results unified across code, Kali, and CVE sources.
+
+    Represents the final output of a unified scan combining static code
+    analysis, Kali VM scanning, and CVE database lookups, with correlated
+    findings, exploit chains, and generated patches.
+
+    Attributes:
+        scan_id: Unique scan identifier
+        started_at: ISO 8601 timestamp of scan start
+        duration: Total scan duration in seconds
+        repo_path: Path to scanned repository (if code scan)
+        kali_target: Target IP/hostname for Kali scan (if Kali scan)
+        merged_findings: Unified findings across all sources
+        code_only_findings: Vulnerabilities from code scan only
+        kali_only_findings: Findings from Kali scan only
+        all_cve_matches: All CVE matches found across scans
+        exploit_chains: Exploit chains detected
+        patches: Generated patches for confirmed vulnerabilities
+        report_md_path: Path to generated Markdown report (if any)
+        report_txt_path: Path to generated text report (if any)
+    """
+    scan_id: str
+    started_at: str
+    duration: float
+    repo_path: Optional[str] = None
+    kali_target: Optional[str] = None
+    merged_findings: List[MergedFinding] = field(default_factory=list)
+    code_only_findings: List[Vulnerability] = field(default_factory=list)
+    kali_only_findings: List[dict] = field(default_factory=list)
+    all_cve_matches: List["CVEMatch"] = field(default_factory=list)
+    exploit_chains: List[ExploitChain] = field(default_factory=list)
+    patches: List[Patch] = field(default_factory=list)
+    report_md_path: Optional[str] = None
+    report_txt_path: Optional[str] = None
+
+
+@dataclass
+class EscalationPath:
+    """Privilege escalation path connecting vulnerabilities to impact.
+
+    Represents a chain of vulnerabilities that can be exploited sequentially
+    to achieve privilege escalation or critical impact.
+
+    Attributes:
+        from_vuln: Starting vulnerability identifier (e.g., "sql_injection")
+        steps: List of escalation steps (human-readable descriptions)
+        to_impact: Final impact achieved (e.g., "account_takeover")
+        severity: Severity level of the escalation path (CRITICAL, HIGH, etc.)
+        finding_ids: List of finding IDs involved in this escalation chain
+        ascii_chain: ASCII visualization of the escalation path
+    """
+    from_vuln: str
+    steps: List[str]
+    to_impact: str
+    severity: str
+    finding_ids: List[str]
+    ascii_chain: str

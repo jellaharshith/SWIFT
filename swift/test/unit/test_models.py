@@ -1,6 +1,6 @@
 import dataclasses
 import pytest
-from agent.models import Vulnerability, Patch, ScanResult, TestResult
+from agent.models import Vulnerability, Patch, ScanResult, TestResult, MergedFinding, UnifiedScanResult
 
 
 def test_vulnerability_creation():
@@ -279,3 +279,40 @@ def test_vulnerability_with_evidence_serializable():
     assert d["remediation_time_minutes"] == 30
     assert isinstance(d["affected_code"], dict)
     assert isinstance(d["references"], list)
+
+
+def test_merged_finding_creation():
+    mf = MergedFinding(id="MERGED-abc12345", vuln_type="sql_injection", severity="HIGH", sources=["code", "kali"])
+    assert mf.id == "MERGED-abc12345"
+    assert mf.severity == "HIGH"
+    assert mf.sources == ["code", "kali"]
+
+
+def test_merged_finding_defaults():
+    mf = MergedFinding(id="MERGED-abc12345", vuln_type="xss", severity="MEDIUM", sources=["code"])
+    assert mf.code_finding is None
+    assert mf.kali_finding is None
+    assert mf.cve_matches == []
+    assert mf.actively_exploited is False
+    assert mf.correlation_confidence == 0.0
+    assert mf.mitre_techniques == []
+
+
+def test_unified_scan_result_creation():
+    r = UnifiedScanResult(scan_id="UNIFIED-001", started_at="2026-04-27T00:00:00Z", duration=5.0)
+    assert r.scan_id == "UNIFIED-001"
+    assert r.duration == 5.0
+
+
+def test_unified_scan_result_defaults():
+    r = UnifiedScanResult(scan_id="UNIFIED-001", started_at="2026-04-27T00:00:00Z", duration=5.0)
+    assert r.repo_path is None
+    assert r.kali_target is None
+    assert r.merged_findings == []
+    assert r.code_only_findings == []
+    assert r.kali_only_findings == []
+    assert r.all_cve_matches == []
+    assert r.exploit_chains == []
+    assert r.patches == []
+    assert r.report_md_path is None
+    assert r.report_txt_path is None
