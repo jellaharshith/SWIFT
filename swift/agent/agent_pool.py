@@ -156,8 +156,8 @@ class AgentPool:
         browser_confirmed_vulns: list = []
         if web_idx >= 0 and not isinstance(results[web_idx], Exception):
             web_tools = results[web_idx] or {}
-            kali_result.setdefault("tools", [])
-            kali_result["tools"].extend(web_tools.get("tools", []))
+            kali_result.setdefault("results", [])
+            kali_result["results"].extend(web_tools.get("results", []))
             # Extract browser-confirmed Vulnerability objects from WebAgent result
             # They were stored as dicts; re-hydrate via bridge on raw browser findings
             browser_dict = web_tools.get("browser", {})

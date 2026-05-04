@@ -29,12 +29,10 @@ def _redact(text: str) -> str:
 
 class _SecretRedactingFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = _redact(str(record.msg))
-        if record.args:
-            if isinstance(record.args, dict):
-                record.args = {k: _redact(str(v)) for k, v in record.args.items()}
-            elif isinstance(record.args, tuple):
-                record.args = tuple(_redact(str(a)) for a in record.args)
+        # Redact the already-formatted message so numeric format specifiers
+        # (e.g. %d, %f) are not broken by converting args to strings early.
+        record.msg = _redact(record.getMessage())
+        record.args = None  # args already consumed; prevent double formatting
         return True
 
 

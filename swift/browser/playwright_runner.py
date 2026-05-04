@@ -130,13 +130,13 @@ async def _probe_sqli(page, url: str, result: BrowserScanResult) -> None:
                 for sig in SQLI_ERROR_SIGNATURES:
                     if sig in body:
                         result.findings.append(BrowserFinding(
-                            kind="sqli_error_based",
+                            kind="sqli_error",
                             severity="critical",
                             url=test_url,
                             evidence=f"db error signature: {sig}",
                             payload=payload,
                         ))
-                        log_step("browser.finding", kind="sqli_error_based", url=test_url)
+                        log_step("browser.finding", kind="sqli_error", url=test_url)
                         break
             except Exception as exc:  # noqa: BLE001
                 log_step("browser.probe.error", url=test_url, err=str(exc), level="warning")
