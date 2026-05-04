@@ -11,15 +11,13 @@ from typing import Callable, List, Optional
 
 import anthropic
 
-from agent.models import Patch, ScanResult, Vulnerability
+from agent.models import ScanResult, Vulnerability
 from agent.vuln_chain_auditor import VulnerabilityChainAuditor
 from chains.detector import ExploitChainDetector
 from config.settings import get_config
 from log.audit import log_step
 from log.logger import MetricsCollector, get_logger
 from output.chains import ChainsFormatter
-from patches.generator import PatchGenerator
-from sandbox.docker_runner import DockerSandbox
 from scanners.haiku_scanner import HaikuTriageScanner
 from scanners.sonnet_scanner import SonnetAnalysisScanner
 from triage.exploit_graph import MAX_CHAIN_CANDIDATES
@@ -49,7 +47,6 @@ def _serialize_findings_sample(vulns: List, max_items: int = 100) -> str:
 
 def scan_codebase(
     repo_path: str,
-    generate_patches_flag: bool = False,
     progress_callback: Optional[Callable[[dict], None]] = None,
     mode: str = "pentester",
 ) -> ScanResult:
@@ -59,18 +56,16 @@ def scan_codebase(
     1. Regex triage (free) — flag suspicious files and line numbers
     2. Haiku scan — fast API call to confirm suspicious lines (~$0.05/file)
     3. Sonnet analysis — deep reasoning with 95% confidence gate (~$0.50/location)
-    4. Patch generation + sandbox validation (optional, only when flag is set)
 
     Args:
         repo_path: Path to the repository root to scan.
-        generate_patches_flag: If True, generate and sandbox-test patches after scan.
         progress_callback: Optional callback function to report progress. Called with dict of
             {stage, stage_name, files_total, files_scanned, current_file}.
         mode: Scan persona — "pentester" (default) uses offensive red-team framing;
             "passive" uses original defensive reviewer framing.
 
     Returns:
-        ScanResult with confirmed vulnerabilities and optional patches.
+        ScanResult with confirmed vulnerabilities, OSINT findings, and post-exploit assessments.
     """
     config = get_config()
     metrics = MetricsCollector()
@@ -367,7 +362,6 @@ def scan_codebase(
         repo_path=repo_path,
         files_scanned=files_scanned,
         vulnerabilities=vulnerabilities,
-        patches=[],
         duration_seconds=duration,
         total_cost_usd=metrics.total_cost_usd,
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -377,18 +371,9 @@ def scan_codebase(
         signals_detected=signal_counter,
         signals_triaged=len(triaged_findings),
         chain_detection_error=chain_detection_error,
+        osint_findings=[],
+        post_exploit_findings=[],
     )
-
-    # --- Phase 4: Patch generation (optional) ---
-    if generate_patches_flag and vulnerabilities:
-        _emit({
-            "stage": 3,
-            "stage_name": "patches",
-            "files_total": len(vulnerabilities),
-            "files_scanned": 0,
-            "current_file": "",
-        })
-        result = generate_patches(result)
 
     # Export chains to standalone JSON if chains exist
     if result.exploit_chains:
@@ -396,55 +381,12 @@ def scan_codebase(
         logger.debug("Chains standalone export: %d bytes", len(chains_export))
 
     logger.info(
-        "Scan %s complete [%s]: %d signals detected, %d triaged, %d chains, %d patches, %.1fs",
+        "Scan %s complete [%s]: %d signals detected, %d triaged, %d chains, %.1fs",
         scan_id, result.status, result.signals_detected, result.signals_triaged,
-        len(result.exploit_chains), len(result.patches), result.duration_seconds,
+        len(result.exploit_chains), result.duration_seconds,
     )
     return result
 
-
-def generate_patches(scan_result: ScanResult) -> ScanResult:
-    """Generate and sandbox-test patches for all vulnerabilities in a ScanResult.
-
-    Calls PatchGenerator (Sonnet) for each vulnerability, then runs each
-    patch through DockerSandbox for isolation-tested validation.
-
-    Args:
-        scan_result: Completed scan with confirmed vulnerabilities.
-
-    Returns:
-        New ScanResult with patches populated.
-    """
-    config = get_config()
-    client = anthropic.Anthropic(api_key=config.api_key)
-    generator = PatchGenerator(client, model=config.sonnet_model)
-    sandbox = DockerSandbox(timeout=config.sandbox_timeout)
-
-    patches: List[Patch] = []
-    for vuln in scan_result.vulnerabilities:
-        patch = generator.generate_patch(vuln)
-        if patch:
-            test_result = sandbox.test_patch(patch)
-            logger.info(
-                "Patch %s sandbox: %s",
-                patch.id,
-                "PASSED" if test_result.passed else "FAILED",
-            )
-            patches.append(patch)
-
-    return ScanResult(
-        scan_id=scan_result.scan_id,
-        repo_path=scan_result.repo_path,
-        files_scanned=scan_result.files_scanned,
-        vulnerabilities=scan_result.vulnerabilities,
-        patches=patches,
-        duration_seconds=scan_result.duration_seconds,
-        total_cost_usd=scan_result.total_cost_usd,
-        timestamp=scan_result.timestamp,
-        exploit_chains=scan_result.exploit_chains,
-        ranked_findings=scan_result.ranked_findings,
-        chain_detection_error=scan_result.chain_detection_error,
-    )
 
 
 def export_chains_standalone(scan_result: ScanResult) -> str:

@@ -49,7 +49,6 @@ def _make_scan_result(vulns: list[Vulnerability] | None = None) -> ScanResult:
         repo_path="/tmp/repo",
         files_scanned=3,
         vulnerabilities=vulns or [],
-        patches=[],
         duration_seconds=1.0,
         total_cost_usd=0.01,
         timestamp="2026-04-27T00:00:00Z",

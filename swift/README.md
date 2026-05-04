@@ -1,6 +1,6 @@
-# SWIFT — AI-Powered Vulnerability Scanner
+# SWIFT — AI-Powered Red-Team Automation Pentester
 
-> Finds, verifies, and fixes security vulnerabilities automatically. Continuous, AI-powered, built for CI/CD.
+> OSINT → active probes → credential-chained attacks → post-exploit assessment. All sandboxed. All AI-driven.
 
 [![CI](https://github.com/jellaharshith/SWIFT/actions/workflows/ci.yml/badge.svg)](https://github.com/jellaharshith/SWIFT/actions/workflows/ci.yml)
 [![PyPI version](https://badge.fury.io/py/swiftsec.svg)](https://pypi.org/project/swiftsec/)
@@ -15,18 +15,22 @@
 ███████║╚███╔███╔╝██║██║        ██║
 ╚══════╝ ╚══╝╚══╝ ╚═╝╚═╝        ╚═╝
 
-  AI-Powered Vulnerability Scanner
-  v2.0.0 · mode: production
+  AI-Powered Red-Team Automation Pentester
+  v3.0.0 · mode: red-team
 ```
 
 ## What SWIFT does
 
-| Step | Model | Result |
-|------|-------|--------|
-| **Triage** | Claude Haiku | Flags suspicious patterns (~50ms/file) |
-| **Analysis** | Claude Sonnet | Confirms real vulnerabilities (≥95% confidence only) |
-| **Patching** | Claude Sonnet + Docker | Generates and tests fixes in isolation |
-| **Reporting** | Markdown / JSON / SARIF | Human + machine-readable output |
+| Phase | Tools | Result |
+|-------|-------|--------|
+| **OSINT** | DNS recon, subfinder, crt.sh, GitHub dorks, Shodan, WHOIS | Target intel before first packet |
+| **Triage** | Claude Haiku | Flags suspicious code patterns (~50ms/file) |
+| **Active probes** | Playwright + Claude Sonnet | 12 vuln types confirmed at ≥95% confidence |
+| **Credential chains** | SessionManager | JWT/cookie reuse across SQLi → auth → IDOR → privesc |
+| **LLM payloads** | Claude Haiku | Context-aware payload mutation, WAF-bypassing variants |
+| **Kali automation** | 13 tools + WAF evasion | nmap, nikto, sqlmap, nuclei, ffuf, amass, feroxbuster + more |
+| **Post-exploit sim** | Docker sandbox | Data-exfil, persistence, C2 feasibility — simulate only |
+| **Reporting** | Markdown / JSON / SARIF | Bug bounty + pentest report formats |
 
 ## Quick start
 
@@ -34,60 +38,152 @@
 pip install swiftsec
 export ANTHROPIC_API_KEY=sk-ant-...
 
-# Scan a local repo
+# Copy and fill in the ROE template (required for offensive commands)
+cp roe.example.yaml roe.yaml
+# Edit roe.yaml: set authorized_targets, window dates, contact
+
+# Full red-team pipeline
+swiftsec redteam --roe roe.yaml --target https://your-authorized-target.com
+
+# OSINT only
+swiftsec osint --roe roe.yaml --out osint.json
+
+# Static code scan
 swiftsec scan ./my-project
 
-# Scan a GitHub repo
-swiftsec scan https://github.com/org/repo
+# Kali offensive scan
+swiftsec kali-scan --target 10.0.0.1 --roe roe.yaml --tools nmap,nikto,nuclei,ffuf
 
-# Full pipeline: scan → patch → validate
-swiftsec full ./my-project --allow-patch-generation --allow-sandbox
-
-# Offensive Kali scan
-swiftsec kali-scan --target 10.0.0.1 --tools nmap,nikto,nuclei
+# Playwright web probe
+swiftsec web-scan --target https://your-authorized-target.com --roe roe.yaml
 
 # Interactive wizard
 swiftsec wizard
 ```
 
-## Docker
+## ROE gate
 
-```bash
-docker pull ghcr.io/jellaharshith/swift:latest
-docker run --rm \
-  -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY \
-  -v $(pwd):/home/swift/work \
-  ghcr.io/jellaharshith/swift scan .
+Every offensive command requires a signed Rules-of-Engagement file:
+
+```yaml
+# roe.yaml
+engagement_id: "ENG-001"
+authorized_targets:
+  - "https://target.example.com"
+allowed_techniques:
+  - osint
+  - active_scan
+  - exploit
+  - post_exploit
+window_start: "2026-01-01T00:00:00"
+window_end:   "2026-12-31T23:59:59"
+contact:      "you@yourorg.com"
+simulate_only: true
 ```
+
+SWIFT **hard fails** (`[DENY]` + exit 2) if:
+- No ROE file provided
+- Target not in `authorized_targets`
+- Technique not in `allowed_techniques`
+- Current time outside `window_start`/`window_end`
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `scan` | Static vulnerability scan (local path or GitHub URL) |
+| `redteam` | Full pipeline: ROE → OSINT → scan → probes → Kali → chains → post-exploit |
+| `osint` | Recon only: DNS, subdomain enum, GitHub dorks, Shodan, WHOIS |
+| `scan` | Static code vulnerability scan (local path or GitHub URL) |
 | `triage` | Fast pattern-matching triage only |
-| `patch` | Generate patches for found vulnerabilities |
-| `validate` | Test patches in Docker sandbox |
-| `full` | Scan → patch → validate pipeline |
 | `full-scan` | Code + Kali + CVE scan simultaneously |
-| `kali-scan` | Kali Linux tools against live target |
-| `web-scan` | Playwright-driven web vulnerability scan |
+| `kali-scan` | 13 Kali tools against live target with WAF evasion |
+| `web-scan` | Playwright-driven active web vulnerability scan (12 types) |
 | `attack-sim` | MITRE ATT&CK-mapped exploit simulation |
 | `live-feed` | Stream live CVEs from NVD + CISA KEV |
-| `wizard` | Interactive scanner wizard |
 | `privesc` | Docker-based privilege escalation tester |
+| `wizard` | Interactive scanner wizard |
+
+## Active probe types
+
+XSS · SQLi · SSRF · SSTI · IDOR · JWT alg:none · XXE · CRLF · NoSQL · Prototype Pollution · Auth Bypass · HTTP Smuggling
+
+## Credential chaining
+
+`SessionManager` shares cookies and JWTs across probe steps:
+
+```
+SQLi → leaked password → form login → JWT captured → IDOR as victim → privilege escalation
+```
+
+Payloads are LLM-generated per detected stack (Haiku, prompt-cached). Hardcoded library used as fallback.
+
+## Post-exploit (simulate only)
+
+| Module | What it measures |
+|--------|-----------------|
+| `data_exfil_sim` | Record count, PII type exposure, no real pull |
+| `persistence_sim` | Writable cron/ssh/systemd — read-only check |
+| `c2_sim` | DNS + HTTP egress to canary host — no real C2 |
+
+All run inside the Docker workbench. `simulate_only: true` is the default and enforced by the ROE.
+
+## Exploit chain graph
+
+DFS over a directed vuln graph with `MAX_CHAIN_DEPTH = 5`. New node types:
+
+```
+exposed_credential → auth_bypass → privilege_escalation
+github_leak        → credential_stuffing
+shodan_service     → exposed_service → network_access
+data_exposure      → sensitive_data_exposure
+c2_feasibility     → command_and_control
+```
+
+## Kali tools
+
+| Tool | MITRE | WAF evasion |
+|------|-------|-------------|
+| nmap | T1046 | `-T2 --max-rate 100 --scan-delay 200ms` |
+| nikto | T1190 | `-evasion 1` |
+| sqlmap | T1190 | `--random-agent --tamper=between,space2comment --delay=1` |
+| nuclei | T1190 | `-rate-limit-minute 30 -timeout 10` |
+| gobuster | T1595.002 | — |
+| masscan | T1595 | — |
+| ffuf | T1595.002 | `-p 0.1-0.3` |
+| wfuzz | T1595.002 | — |
+| feroxbuster | T1595.002 | `--rate-limit 50` |
+| httpx | T1595.001 | — |
+| subfinder | T1590.001 | — |
+| amass | T1590.001 | — |
+| searchsploit | T1588.005 | — |
 
 ## Configuration
 
 ```bash
-cp .env.example .env
-# Set ANTHROPIC_API_KEY=sk-ant-...
+cp swift/.env.example .env
 ```
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | ✅ | Claude API key |
+| `GITHUB_TOKEN` | Optional | GitHub dork search |
+| `SHODAN_API_KEY` | Optional | Shodan intel |
+| `NVD_API_KEY` | Optional | NVD CVE feed (higher rate limit) |
+| `SWIFT_ROE` | Optional | Default ROE file path |
+
+## Safety guarantees
+
+- ROE gate: hard fail-closed on scope/technique/window violations
+- All offensive ops inside ephemeral Docker container (auto-removed)
+- No host filesystem mounts during offensive runs
+- Post-exploit: simulate-only by default, enforced by ROE
+- Code scan sandbox: `--network=none`, read-only FS, 2-core / 2 GB / 30 s
+- **Only reports findings with confidence ≥ 95%**
 
 ## CI/CD integration
 
 ```yaml
-- name: SWIFT security scan
+- name: SWIFT code scan
   run: swiftsec scan . --output json > swift-report.json
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -96,22 +192,15 @@ cp .env.example .env
 
 ## Output is pipe-safe
 
-Banner always goes to stderr. JSON to stdout. Safe to pipe:
+Banner always goes to stderr. JSON to stdout:
 
 ```bash
-swiftsec scan ./repo | jq '.findings[] | select(.severity == "HIGH")'
+swiftsec scan ./repo | jq '.findings[] | select(.severity == "CRITICAL")'
 ```
-
-## Safety guarantees
-
-- No network in sandbox (`--network=none`)
-- Read-only filesystem except `/tmp`
-- 2-core / 2 GB / 30-second hard limit
-- **Only reports findings with confidence ≥ 95%**
 
 ## Docs
 
-Full architecture and module reference: [`docs/README.md`](docs/README.md)
+Full architecture: [`docs/README.md`](docs/README.md)
 
 ## Contributing
 

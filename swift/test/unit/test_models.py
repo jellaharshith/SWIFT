@@ -1,6 +1,6 @@
 import dataclasses
 import pytest
-from agent.models import Vulnerability, Patch, ScanResult, TestResult, MergedFinding, UnifiedScanResult
+from agent.models import Vulnerability, ScanResult, TestResult, MergedFinding, UnifiedScanResult
 
 
 def test_vulnerability_creation():
@@ -34,27 +34,12 @@ def test_vulnerability_serializable():
     assert isinstance(d, dict)
 
 
-def test_patch_creation():
-    p = Patch(
-        id="PATCH-001",
-        vuln_id="SWIFT-001",
-        file_path="app.py",
-        original_code="query = f'SELECT * FROM users WHERE id={user_id}'",
-        patched_code="query = 'SELECT * FROM users WHERE id=?'",
-        diff="--- a/app.py\n+++ b/app.py",
-        confidence=0.95,
-    )
-    assert p.id == "PATCH-001"
-    assert p.vuln_id == "SWIFT-001"
-
-
 def test_scan_result_creation():
     sr = ScanResult(
         scan_id="SCAN-abc123",
         repo_path="/tmp/repo",
         files_scanned=5,
         vulnerabilities=[],
-        patches=[],
         duration_seconds=1.5,
         total_cost_usd=0.05,
         timestamp="2026-04-18T00:00:00",
@@ -313,6 +298,7 @@ def test_unified_scan_result_defaults():
     assert r.kali_only_findings == []
     assert r.all_cve_matches == []
     assert r.exploit_chains == []
-    assert r.patches == []
+    assert r.osint_findings == []
+    assert r.post_exploit_findings == []
     assert r.report_md_path is None
     assert r.report_txt_path is None
