@@ -5,7 +5,7 @@ import os
 import tempfile
 import time
 
-from agent.models import Patch, TestResult
+from agent.models import TestResult
 from log.logger import get_logger
 
 logger = get_logger()

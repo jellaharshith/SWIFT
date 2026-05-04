@@ -22,7 +22,7 @@ pytestmark = pytest.mark.skipif(
 def scan_result():
     """Run real scan once and share result across E2E tests."""
     from agent.orchestrator import scan_codebase
-    return scan_codebase(E2E_REPO, generate_patches_flag=False)
+    return scan_codebase(E2E_REPO)
 
 
 def test_e2e_scan_returns_result(scan_result):
@@ -66,6 +66,6 @@ def test_e2e_markdown_output_has_header(scan_result):
     assert "# SWIFT Vulnerability Report" in md
 
 
-def test_e2e_with_patches(scan_result):
-    """Running with patches flag must produce at least one patch for confirmed vulns."""
-    pytest.skip("Patch E2E requires Docker — run manually")
+def test_e2e_redteam_stub(scan_result):
+    """Redteam pipeline E2E requires live target + ROE — run manually."""
+    pytest.skip("Redteam E2E requires authorized target and roe.yaml")

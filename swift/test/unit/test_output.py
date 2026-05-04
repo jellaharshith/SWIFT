@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from agent.models import Patch, ScanResult, Vulnerability, ExploitChain
+from agent.models import ScanResult, Vulnerability, ExploitChain
 from output.formatters import JSONFormatter, MarkdownFormatter, format_output
 
 
@@ -24,18 +24,6 @@ def _make_vuln() -> Vulnerability:
     )
 
 
-def _make_patch() -> Patch:
-    return Patch(
-        id="PATCH-001",
-        vuln_id="SWIFT-001",
-        file_path="app.py",
-        original_code='query = f"SELECT * FROM users WHERE id={user_id}"',
-        patched_code="query = 'SELECT * FROM users WHERE id=?'",
-        diff="--- a/app.py\n+++ b/app.py\n@@ -42,1 +42,1 @@\n-query = f\"SELECT...\"\n+query = 'SELECT * FROM users WHERE id=?'",
-        confidence=0.97,
-    )
-
-
 def _make_chain() -> ExploitChain:
     return ExploitChain(
         chain_id="CHAIN-001",
@@ -49,13 +37,12 @@ def _make_chain() -> ExploitChain:
     )
 
 
-def _make_scan_result(vulns=None, patches=None, chains=None) -> ScanResult:
+def _make_scan_result(vulns=None, chains=None) -> ScanResult:
     return ScanResult(
         scan_id="SCAN-001",
         repo_path="/tmp/repo",
         files_scanned=10,
         vulnerabilities=vulns if vulns is not None else [],
-        patches=patches if patches is not None else [],
         duration_seconds=5.0,
         total_cost_usd=0.42,
         timestamp="2026-04-18T12:00:00Z",
@@ -70,7 +57,7 @@ def _make_scan_result(vulns=None, patches=None, chains=None) -> ScanResult:
 class TestJSONFormatter:
     def test_json_formatter_produces_valid_json(self):
         """Output must be parseable JSON."""
-        result = _make_scan_result(vulns=[_make_vuln()], patches=[_make_patch()])
+        result = _make_scan_result(vulns=[_make_vuln()])
         output = JSONFormatter().format(result)
         parsed = json.loads(output)  # raises if invalid
         assert isinstance(parsed, dict)
@@ -88,12 +75,11 @@ class TestJSONFormatter:
 
     def test_json_summary_counts(self):
         """Summary block must contain correct counts and severity breakdown."""
-        result = _make_scan_result(vulns=[_make_vuln()], patches=[_make_patch()])
+        result = _make_scan_result(vulns=[_make_vuln()])
         parsed = json.loads(JSONFormatter().format(result))
         summary = parsed["summary"]
         assert summary["files_scanned"] == 10
         assert summary["vulnerabilities_found"] == 1
-        assert summary["patches_generated"] == 1
         # Severity key must be lowercase
         assert summary["by_severity"]["critical"] == 1
 
@@ -109,23 +95,12 @@ class TestJSONFormatter:
         assert vuln["severity"] == "CRITICAL"
         assert vuln["confidence"] == 0.97
 
-    def test_json_patch_fields(self):
-        """Each patch entry must carry at least id, vuln_id, and file_path."""
-        result = _make_scan_result(patches=[_make_patch()])
-        parsed = json.loads(JSONFormatter().format(result))
-        patch = parsed["patches"][0]
-        assert patch["id"] == "PATCH-001"
-        assert patch["vuln_id"] == "SWIFT-001"
-        assert patch["file_path"] == "app.py"
-
     def test_json_empty_lists(self):
-        """Formatter must handle empty vulnerabilities and patches gracefully."""
+        """Formatter must handle empty vulnerabilities gracefully."""
         result = _make_scan_result()
         parsed = json.loads(JSONFormatter().format(result))
         assert parsed["vulnerabilities"] == []
-        assert parsed["patches"] == []
         assert parsed["summary"]["vulnerabilities_found"] == 0
-        assert parsed["summary"]["patches_generated"] == 0
 
     def test_json_by_severity_all_zeros_when_empty(self):
         """by_severity must still contain all four keys even with no findings."""
@@ -238,37 +213,18 @@ class TestMarkdownFormatter:
         output = MarkdownFormatter().format(result)
         assert "## Vulnerabilities" not in output
 
-    def test_markdown_has_patches_section(self):
-        """Report must include ## Patches with patch details when patches exist."""
-        result = _make_scan_result(patches=[_make_patch()])
-        output = MarkdownFormatter().format(result)
-        assert "## Patches" in output
-        assert "PATCH-001" in output
-
-    def test_markdown_empty_no_patches_section(self):
-        """Report must NOT include ## Patches when there are none."""
-        result = _make_scan_result(patches=[])
-        output = MarkdownFormatter().format(result)
-        assert "## Patches" not in output
-
     def test_markdown_summary_contains_key_metrics(self):
-        """Summary section must surface files_scanned, vuln count, and patch count."""
-        result = _make_scan_result(vulns=[_make_vuln()], patches=[_make_patch()])
+        """Summary section must surface files_scanned and vuln count."""
+        result = _make_scan_result(vulns=[_make_vuln()])
         output = MarkdownFormatter().format(result)
         assert "10" in output        # files_scanned
-        assert "1" in output         # vuln and patch counts
+        assert "1" in output         # vuln count
 
     def test_markdown_code_snippet_in_python_block(self):
         """Vulnerability code snippet must be wrapped in a ```python fence."""
         result = _make_scan_result(vulns=[_make_vuln()])
         output = MarkdownFormatter().format(result)
         assert "```python" in output
-
-    def test_markdown_diff_in_diff_block(self):
-        """Patch diff must be wrapped in a ```diff fence."""
-        result = _make_scan_result(patches=[_make_patch()])
-        output = MarkdownFormatter().format(result)
-        assert "```diff" in output
 
     def test_markdown_contains_repo_path(self):
         """Report metadata must mention the repo path."""

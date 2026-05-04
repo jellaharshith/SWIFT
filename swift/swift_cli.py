@@ -17,8 +17,6 @@ from typing import Any
 from cli.banner import print_banner, should_show_banner
 from swift import __version__
 from output.formatters import JSONFormatter, MarkdownFormatter
-from patch_validator import validate_patch
-from sandbox_runner import run_in_sandbox
 from agent.agent_pool import AgentPool
 from analysis.privesc import PrivilegeEscalationAnalyzer
 from output.bug_bounty_report import BugBountyFormatter
@@ -65,14 +63,8 @@ def _load_config(config_path: str | None) -> dict[str, Any]:
 
 
 def _ensure_zero_trust(args: argparse.Namespace) -> None:
-    if getattr(args, "read_only", True) and args.command in {"patch", "validate", "full"}:
-        _fail_closed(f"{args.command} is blocked while --read-only is enabled.")
-    if getattr(args, "allow_patch_generation", False) is False and args.command == "patch":
-        _fail_closed("Patch generation requires --allow-patch-generation.")
-    if getattr(args, "allow_sandbox", False) is False and args.command == "validate":
-        _fail_closed("Sandbox validation requires --allow-sandbox.")
-    if getattr(args, "allow_sandbox", False) is False and args.command == "full":
-        _fail_closed("Full workflow with validation requires --allow-sandbox.")
+    if getattr(args, "read_only", True) is False:
+        return  # --no-read-only explicitly set; allow all operations
 
 
 def _format_scan(result: Any, output_format: str) -> str:
@@ -95,7 +87,7 @@ def run_scan(args: argparse.Namespace) -> dict[str, Any]:
             "command_executed": "swift scan",
         },
     )
-    result = scan_codebase(str(repo), generate_patches_flag=False)
+    result = scan_codebase(str(repo))
     rendered = _format_scan(result, args.output)
     out_file = artifacts_dir / f"scan.{ 'md' if args.output == 'markdown' else 'json'}"
     out_file.write_text(rendered, encoding="utf-8")
@@ -114,62 +106,16 @@ def run_triage(args: argparse.Namespace) -> dict[str, Any]:
     return run_scan(args)
 
 
-def run_patch(args: argparse.Namespace) -> dict[str, Any]:
-    from agent.orchestrator import scan_codebase
-
-    repo = Path(args.repo).resolve()
-    artifacts_dir, audit_log = _artifact_paths(repo)
-    _append_audit(
-        audit_log,
-        {
-            "timestamp": _utc_now(),
-            "action": "patch",
-            "repo_path": str(repo),
-            "command_executed": "swift patch",
-        },
-    )
-    result = scan_codebase(str(repo), generate_patches_flag=True)
-    rendered = _format_scan(result, args.output)
-    out_file = artifacts_dir / f"patch.{ 'md' if args.output == 'markdown' else 'json'}"
-    out_file.write_text(rendered, encoding="utf-8")
-    payload = {
-        "status": "ok",
-        "summary": f"Patches generated: {len(result.patches)}",
-        "artifact": str(out_file),
-    }
-    _write_json(artifacts_dir / "patch.result.json", payload)
-    return payload
+def run_redteam(args: argparse.Namespace) -> dict:
+    """Full red-team pipeline: ROE → OSINT → scan → probes → Kali → chains → post-exploit."""
+    print("[redteam] Not yet fully wired — run: swift web-scan + swift kali-scan + swift osint")
+    return {"status": "stub", "message": "redteam command coming in next integration step"}
 
 
-def run_validate(args: argparse.Namespace) -> dict[str, Any]:
-    repo = Path(args.repo).resolve()
-    artifacts_dir, audit_log = _artifact_paths(repo)
-    _append_audit(
-        audit_log,
-        {
-            "timestamp": _utc_now(),
-            "action": "validate",
-            "repo_path": str(repo),
-            "file_path": args.target_file or "",
-            "command_executed": "swift validate",
-        },
-    )
-    if args.patch_file:
-        patch_text = Path(args.patch_file).resolve().read_text(encoding="utf-8")
-        result = validate_patch(
-            original_repo_path=str(repo),
-            target_file_path=args.target_file or "",
-            unified_diff_patch=patch_text,
-            artifacts_root=str(artifacts_dir / "validator"),
-        )
-    else:
-        result = run_in_sandbox(
-            repo_path=str(repo),
-            command=args.command_override,
-            artifacts_root=str(artifacts_dir / "sandbox"),
-        )
-    _write_json(artifacts_dir / "validate.result.json", result)
-    return result
+def run_osint(args: argparse.Namespace) -> dict:
+    """OSINT recon phase: DNS, subdomain, GitHub dorks, Shodan, WHOIS."""
+    print("[osint] Not yet fully wired — OSINT modules created separately")
+    return {"status": "stub", "message": "osint command coming in next integration step"}
 
 
 def run_report(args: argparse.Namespace) -> dict[str, Any]:
@@ -190,22 +136,7 @@ def run_report(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def run_full(args: argparse.Namespace) -> dict[str, Any]:
-    scan_payload = run_scan(args)
-    if args.allow_patch_generation:
-        patch_payload = run_patch(args)
-    else:
-        patch_payload = {"status": "skipped", "summary": "Patch generation not allowed."}
-    validate_payload = run_validate(args) if args.allow_sandbox else {
-        "status": "skipped",
-        "summary": "Sandbox validation not allowed.",
-    }
-    return {
-        "status": "ok",
-        "summary": "Full workflow completed with zero-trust gates.",
-        "scan": scan_payload,
-        "patch": patch_payload,
-        "validate": validate_payload,
-    }
+    return run_scan(args)
 
 
 # ─── Unified Scanner ──────────────────────────────────────────────────────────
@@ -237,7 +168,6 @@ def run_full_scan(args: argparse.Namespace) -> dict[str, Any]:
         repo_path=repo,
         kali_target=args.target,
         tools=tools,
-        generate_patches=args.patches,
         skip_kali_build=args.skip_build,
     ))
 
@@ -323,10 +253,11 @@ def run_kali_scan(args: argparse.Namespace) -> dict[str, Any]:
 
     report = runner.run_scan(target=target, tools=tools)
 
-    # Save report
     out_path = Path(args.output_file) if args.output_file else Path(f"kali-scan-{target.replace('/', '_')}.json")
     out_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(f"\n[SWIFT] Report saved → {out_path}")
+
+    from output.kali_report import KaliBugBountyReport
+    print(KaliBugBountyReport().render(report, artifact_path=str(out_path)))
 
     return {
         "status": "ok",
@@ -434,7 +365,6 @@ def _add_shared_flags(p: argparse.ArgumentParser, include_output: bool = True) -
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--read-only", dest="read_only", action="store_true", default=True)
     mode.add_argument("--no-read-only", dest="read_only", action="store_false")
-    p.add_argument("--allow-patch-generation", action="store_true")
     p.add_argument("--allow-sandbox", action="store_true")
     if include_output:
         p.add_argument("--output", choices=["json", "markdown"], default="json")
@@ -521,20 +451,11 @@ def build_parser() -> argparse.ArgumentParser:
     triage = sub.add_parser("triage", help="Fast triage scan (alias for scan)")
     _add_shared_flags(triage)
 
-    patch = sub.add_parser("patch", help="Generate security patches")
-    _add_shared_flags(patch)
-
-    v = sub.add_parser("validate", help="Validate patches in sandbox")
-    _add_shared_flags(v, include_output=False)
-    v.add_argument("--patch-file", default=None)
-    v.add_argument("--target-file", default=None)
-    v.add_argument("--command-override", default=None)
-
     r = sub.add_parser("report", help="Generate report from previous scan")
     _add_shared_flags(r, include_output=False)
     r.add_argument("--format", choices=["json", "markdown"], default="markdown")
 
-    full = sub.add_parser("full", help="Full pipeline: scan → patch → validate")
+    full = sub.add_parser("full", help="Full scan pipeline")
     _add_shared_flags(full)
 
     # ── Unified scanner ────────────────────────────────────────────────────
@@ -542,7 +463,6 @@ def build_parser() -> argparse.ArgumentParser:
     fs.add_argument("--repo", default=None, help="Local repo path for code scan")
     fs.add_argument("--target", default=None, help="Host/URL for Kali offensive scan")
     fs.add_argument("--tools", default=None, help="Comma-separated Kali tools (default: all)")
-    fs.add_argument("--patches", action="store_true", help="Generate patches for code findings")
     fs.add_argument("--output", choices=["md", "txt", "both"], default="both")
     fs.add_argument("--skip-build", dest="skip_build", action="store_true",
                     help="Skip Kali Docker image build check")
@@ -572,6 +492,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="MITRE technique ID (e.g. T1046) or 'all'",
     )
     atk.add_argument("--skip-build", action="store_true", help="Skip docker image build check")
+
+    redteam = sub.add_parser("redteam", help="Full red-team pipeline (ROE required)")
+    redteam.add_argument("--roe", required=True, help="Path to rules-of-engagement YAML")
+    redteam.add_argument("--repo", default=None)
+    redteam.add_argument("--target", default=None)
+    redteam.add_argument("--phases", default="osint,active,chain,postex",
+                         help="Comma-separated phases to run")
+    redteam.add_argument("--max-runtime", type=int, default=1800)
+    redteam.add_argument("--no-llm-payloads", action="store_true")
+
+    osint = sub.add_parser("osint", help="OSINT recon: DNS, GitHub dorks, Shodan, WHOIS")
+    osint.add_argument("--roe", required=True)
+    osint.add_argument("--out", default="osint.json")
 
     sub.add_parser(
         "wizard",
@@ -652,9 +585,30 @@ def uuid_safe(s: str) -> str:
 
 def main() -> None:
     from log.logger import get_logger
+    from cli.repl import run_repl, NO_JSON_DUMP_CMDS
     logger = get_logger("swift.cli")
 
     parser = build_parser()
+
+    if len(sys.argv) == 1:
+        print_banner()
+        handlers = {
+            "scan": run_scan,
+            "triage": run_triage,
+            "report": run_report,
+            "full": run_full,
+            "full-scan": run_full_scan,
+            "kali-scan": run_kali_scan,
+            "live-feed": run_live_feed,
+            "attack-sim": run_attack_sim,
+            "wizard": run_wizard,
+            "web-scan": run_web_scan,
+            "privesc": run_privesc,
+            "redteam": run_redteam,
+            "osint": run_osint,
+        }
+        sys.exit(run_repl(parser, handlers))
+
     args = parser.parse_args()
 
     if should_show_banner(args, sys.argv):
@@ -675,8 +629,6 @@ def main() -> None:
     handlers = {
         "scan": run_scan,
         "triage": run_triage,
-        "patch": run_patch,
-        "validate": run_validate,
         "report": run_report,
         "full": run_full,
         "full-scan": run_full_scan,
@@ -686,11 +638,13 @@ def main() -> None:
         "wizard": run_wizard,
         "web-scan": run_web_scan,
         "privesc": run_privesc,
+        "redteam": run_redteam,
+        "osint": run_osint,
     }
     try:
         payload = handlers[args.command](args)
         log_step("cli.complete", command=args.command)
-        if args.command not in {"live-feed", "wizard"}:
+        if args.command not in NO_JSON_DUMP_CMDS:
             print(json.dumps(payload, indent=2, sort_keys=True))
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)

@@ -20,9 +20,9 @@ class TestJSONFormatterIntegration:
         data = json.loads(JSONFormatter().format(sample_scan_result))
         assert data["summary"]["vulnerabilities_found"] == 1
 
-    def test_patch_count_in_summary(self, sample_scan_result):
+    def test_redteam_findings_in_summary(self, sample_scan_result):
         data = json.loads(JSONFormatter().format(sample_scan_result))
-        assert data["summary"]["patches_generated"] == 1
+        assert "redteam_findings" in data["summary"]
 
     def test_severity_breakdown(self, sample_scan_result):
         data = json.loads(JSONFormatter().format(sample_scan_result))
@@ -38,12 +38,9 @@ class TestJSONFormatterIntegration:
         assert vuln["id"] == "SWIFT-001"
         assert vuln["confidence"] == 0.97
 
-    def test_patch_fields_present(self, sample_scan_result):
+    def test_osint_findings_key_present(self, sample_scan_result):
         data = json.loads(JSONFormatter().format(sample_scan_result))
-        patch = data["patches"][0]
-        assert patch["vuln_id"] == "SWIFT-001"
-        assert "diff" in patch
-
+        assert "osint_findings" in data
 
 class TestMarkdownFormatterIntegration:
     def test_has_title(self, sample_scan_result):
@@ -57,10 +54,6 @@ class TestMarkdownFormatterIntegration:
     def test_vuln_section_present(self, sample_scan_result):
         md = MarkdownFormatter().format(sample_scan_result)
         assert "## Vulnerabilities" in md
-
-    def test_patch_section_present(self, sample_scan_result):
-        md = MarkdownFormatter().format(sample_scan_result)
-        assert "## Patches" in md
 
     def test_empty_result_no_vuln_section(self, empty_scan_result):
         md = MarkdownFormatter().format(empty_scan_result)

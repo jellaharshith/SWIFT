@@ -439,7 +439,6 @@ class NormalizedReportFormatter:
         selected = _select_top_findings(result.vulnerabilities, include_low=include_low)
         grouped = _group_similar(selected)
 
-        patches_count = len(result.patches)
         files_scanned = result.files_scanned
         total_raw = len(result.vulnerabilities)
         shown = len(selected)
@@ -477,7 +476,6 @@ class NormalizedReportFormatter:
             files_scanned=files_scanned,
             total_raw=total_raw,
             shown=shown,
-            patches_count=patches_count,
             chains=chains,
             is_training=is_training,
             result=result,
@@ -545,27 +543,7 @@ class NormalizedReportFormatter:
                     lines.append("```")
                     lines.append("")
 
-        # ---- 5. Patches ----
-        if result.patches:
-            lines.append("---")
-            lines.append("")
-            lines.append("## 5. Generated Patches")
-            lines.append("")
-            lines.append(
-                f"SWIFT generated **{patches_count} patch(es)** "
-                "automatically. Each patch was validated in a sandboxed Docker "
-                "environment (no network, read-only filesystem, 30-second timeout)."
-            )
-            lines.append("")
-            for patch in result.patches[:5]:
-                lines.append(f"### Patch `{patch.id}` → fixes `{patch.vuln_id}`")
-                lines.append("")
-                lines.append(f"**File:** `{patch.file_path}`")
-                lines.append("")
-                lines.append("```diff")
-                lines.append(patch.diff.strip())
-                lines.append("```")
-                lines.append("")
+        # TODO: add osint_findings and post_exploit_findings sections
 
         # ---- Footer ----
         lines.append("---")
@@ -589,7 +567,6 @@ class NormalizedReportFormatter:
         files_scanned: int,
         total_raw: int,
         shown: int,
-        patches_count: int,
         chains: List[ExploitChain],
         is_training: bool,
         result: ScanResult,
@@ -607,14 +584,6 @@ class NormalizedReportFormatter:
             f"low-confidence signals), **{shown} high-value finding(s)** were selected "
             "for this report."
         )
-
-        if patches_count > 0:
-            lines.append(
-                f"SWIFT auto-generated **{patches_count} patch(es)** that have been "
-                "sandbox-tested and are ready for developer review."
-            )
-        else:
-            lines.append("No patches were requested or generated in this scan.")
 
         if chains:
             lines.append(

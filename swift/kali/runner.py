@@ -54,9 +54,42 @@ MITRE_MAPPINGS: dict[str, dict] = {
         "technique": "Obtain Capabilities — Exploits",
         "tactic": "Resource Development",
     },
+    "wfuzz": {
+        "technique_id": "T1595.002",
+        "technique": "Active Scanning: Vulnerability Scanning",
+        "tactic": "Reconnaissance",
+    },
+    "ffuf": {
+        "technique_id": "T1595.002",
+        "technique": "Active Scanning: Vulnerability Scanning",
+        "tactic": "Reconnaissance",
+    },
+    "httpx": {
+        "technique_id": "T1595.001",
+        "technique": "Active Scanning: Scanning IP Blocks",
+        "tactic": "Reconnaissance",
+    },
+    "subfinder": {
+        "technique_id": "T1590.001",
+        "technique": "Gather Victim Network Info: Domain Properties",
+        "tactic": "Reconnaissance",
+    },
+    "amass": {
+        "technique_id": "T1590.001",
+        "technique": "Gather Victim Network Info: Domain Properties",
+        "tactic": "Reconnaissance",
+    },
+    "feroxbuster": {
+        "technique_id": "T1595.002",
+        "technique": "Active Scanning: Vulnerability Scanning",
+        "tactic": "Reconnaissance",
+    },
 }
 
-ALL_TOOLS = ["nmap", "masscan", "nikto", "sqlmap", "nuclei", "gobuster", "searchsploit"]
+ALL_TOOLS = [
+    "nmap", "masscan", "nikto", "sqlmap", "nuclei", "gobuster", "searchsploit",
+    "wfuzz", "ffuf", "httpx", "subfinder", "amass", "feroxbuster",
+]
 
 
 class KaliRunner:
@@ -156,7 +189,8 @@ class KaliRunner:
         """T1046 — Network Service Discovery."""
         host = self._host_only(target)
         lines = list(self._docker_exec(
-            ["nmap", "-sV", "-O", "--open", "-T3", "-p", "1-10000", host],
+            ["nmap", "-sV", "-O", "--open", "-T2", "--max-rate", "100",
+             "--scan-delay", "200ms", "-p", "1-10000", host],
             "NMAP",
         ))
         for line in lines:
@@ -188,7 +222,7 @@ class KaliRunner:
         """T1190 — Web application vulnerability scan."""
         url = target if target.startswith("http") else f"http://{target}"
         lines = list(self._docker_exec(
-            ["nikto", "-h", url, "-Format", "txt"],
+            ["nikto", "-h", url, "-Format", "txt", "-evasion", "1"],
             "NIKTO",
         ))
         for line in lines:
@@ -205,7 +239,8 @@ class KaliRunner:
         url = target if target.startswith("http") else f"http://{target}"
         lines = list(self._docker_exec(
             ["sqlmap", "-u", url, "--batch", "--level=2", "--risk=1",
-             "--output-dir=/tmp/sqlmap_out"],
+             "--output-dir=/tmp/sqlmap_out",
+             "--random-agent", "--tamper=between,space2comment", "--delay=1"],
             "SQLMAP",
         ))
         for line in lines:
@@ -222,7 +257,7 @@ class KaliRunner:
         url = target if target.startswith("http") else f"http://{target}"
         lines = list(self._docker_exec(
             ["nuclei", "-u", url, "-severity", "critical,high,medium",
-             "-silent", "-json"],
+             "-silent", "-json", "-rate-limit-minute", "30", "-timeout", "10"],
             "NUCLEI",
         ))
         findings = []
@@ -293,6 +328,132 @@ class KaliRunner:
             **MITRE_MAPPINGS["searchsploit"],
         }
 
+    def _run_wfuzz(self, target: str) -> dict:
+        """T1595.002 — Fuzzing-based vulnerability scanning."""
+        import time
+        url = target if target.startswith("http") else f"http://{target}"
+        timestamp = int(time.time())
+        lines = list(self._docker_exec(
+            ["wfuzz", "-u", f"{url}/FUZZ",
+             "-w", "/usr/share/wordlists/dirb/common.txt",
+             "--hc", "404", "-f", f"/tmp/wfuzz_{timestamp}.json,json"],
+            "WFUZZ",
+        ))
+        for line in lines:
+            print(f"  {line}")
+        return {
+            "tool": "wfuzz",
+            "target": url,
+            "output": "\n".join(lines),
+            **MITRE_MAPPINGS["wfuzz"],
+        }
+
+    def _run_ffuf(self, target: str) -> dict:
+        """T1595.002 — Fast web fuzzer with WAF evasion timing."""
+        import time
+        url = target if target.startswith("http") else f"http://{target}"
+        timestamp = int(time.time())
+        lines = list(self._docker_exec(
+            ["ffuf", "-u", f"{url}/FUZZ",
+             "-w", "/usr/share/wordlists/dirb/common.txt",
+             "-p", "0.1-0.3",
+             "-mc", "200,301,302,401,403",
+             "-o", f"/tmp/ffuf_{timestamp}.json"],
+            "FFUF",
+        ))
+        for line in lines:
+            print(f"  {line}")
+        return {
+            "tool": "ffuf",
+            "target": url,
+            "output": "\n".join(lines),
+            **MITRE_MAPPINGS["ffuf"],
+        }
+
+    def _run_httpx(self, target: str) -> dict:
+        """T1595.001 — HTTP probe for live host discovery and tech fingerprint."""
+        url = target if target.startswith("http") else f"http://{target}"
+        lines = list(self._docker_exec(
+            ["httpx", "-u", url, "-title", "-tech-detect", "-status-code",
+             "-content-length", "-json"],
+            "HTTPX",
+        ))
+        findings = []
+        raw_lines = []
+        for line in lines:
+            print(f"  {line}")
+            raw_lines.append(line)
+            try:
+                findings.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+        return {
+            "tool": "httpx",
+            "target": url,
+            "output": "\n".join(raw_lines),
+            "structured_findings": findings,
+            **MITRE_MAPPINGS["httpx"],
+        }
+
+    def _run_subfinder(self, target: str) -> dict:
+        """T1590.001 — Passive subdomain enumeration."""
+        host = self._host_only(target)
+        lines = list(self._docker_exec(
+            ["subfinder", "-d", host, "-silent", "-json"],
+            "SUBFINDER",
+        ))
+        subdomains = []
+        raw_lines = []
+        for line in lines:
+            print(f"  {line}")
+            raw_lines.append(line)
+            try:
+                subdomains.append(json.loads(line))
+            except json.JSONDecodeError:
+                if line.strip():
+                    subdomains.append({"host": line.strip()})
+        return {
+            "tool": "subfinder",
+            "target": host,
+            "output": "\n".join(raw_lines),
+            "subdomains": subdomains,
+            **MITRE_MAPPINGS["subfinder"],
+        }
+
+    def _run_amass(self, target: str) -> dict:
+        """T1590.001 — Active subdomain enumeration and ASN mapping."""
+        host = self._host_only(target)
+        lines = list(self._docker_exec(
+            ["amass", "enum", "-passive", "-d", host, "-json",
+             "/tmp/amass_out.json"],
+            "AMASS",
+        ))
+        for line in lines:
+            print(f"  {line}")
+        return {
+            "tool": "amass",
+            "target": host,
+            "output": "\n".join(lines),
+            **MITRE_MAPPINGS["amass"],
+        }
+
+    def _run_feroxbuster(self, target: str) -> dict:
+        """T1595.002 — Recursive content discovery with rate limiting."""
+        url = target if target.startswith("http") else f"http://{target}"
+        lines = list(self._docker_exec(
+            ["feroxbuster", "-u", url, "--rate-limit", "50",
+             "--timeout", "10", "-q"],
+            "FEROXBUSTER",
+        ))
+        for line in lines:
+            print(f"  {line}")
+        return {
+            "tool": "feroxbuster",
+            "target": url,
+            "output": "\n".join(lines),
+            **MITRE_MAPPINGS["feroxbuster"],
+        }
+
     def run_scan(
         self,
         target: str,
@@ -316,6 +477,12 @@ class KaliRunner:
             "nuclei": lambda: self._run_nuclei(target),
             "gobuster": lambda: self._run_gobuster(target),
             "searchsploit": lambda: self._run_searchsploit(discovered_services or [target]),
+            "wfuzz": lambda: self._run_wfuzz(target),
+            "ffuf": lambda: self._run_ffuf(target),
+            "httpx": lambda: self._run_httpx(target),
+            "subfinder": lambda: self._run_subfinder(target),
+            "amass": lambda: self._run_amass(target),
+            "feroxbuster": lambda: self._run_feroxbuster(target),
         }
 
         for tool in tools:
