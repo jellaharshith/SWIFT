@@ -1,17 +1,16 @@
 # Stage 1: builder
 FROM python:3.10-slim AS builder
 WORKDIR /build
-COPY swift/requirement.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirement.txt
+COPY swift/ .
+RUN pip install --no-cache-dir --prefix=/install -r requirement.txt && \
+    pip install --no-cache-dir --prefix=/install .
 
 # Stage 2: runtime
 FROM python:3.10-slim
 WORKDIR /app
 COPY --from=builder /install /usr/local
 COPY swift/ .
-# Remove venv and test artifacts from image
 RUN rm -rf .venv __pycache__ test/.venv
-ENV PYTHONPATH=/app
 ENV SWIFT_ENV=apprunner
-EXPOSE 8000
-CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["swiftsec"]
+CMD ["--help"]

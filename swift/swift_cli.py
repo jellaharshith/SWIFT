@@ -1,6 +1,10 @@
 """CLI-first zero-trust local workflow for SWIFT."""
 from __future__ import annotations
 
+# Load .env before any module reads os.getenv at import time.
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 import asyncio
 import json
@@ -372,7 +376,7 @@ def run_live_feed(args: argparse.Namespace) -> dict[str, Any]:
 
     print(f"[SWIFT] Live CVE feed started (poll every {args.interval}s). Ctrl+C to stop.\n", flush=True)
     try:
-        asyncio.run(feed.poll_forever(on_cve))
+        asyncio.run(feed.poll_forever(on_cve, interval=args.interval))
     except KeyboardInterrupt:
         print(f"\n[SWIFT] Feed stopped. Total CVEs seen: {count['total']}")
 
@@ -448,7 +452,7 @@ _WIZARD_MENU = """What do you want to scan?
 """
 
 
-def run_wizard(_args: Any) -> None:
+def run_wizard(args: Any) -> None:
     """Interactive plain-English wizard for target selection and scanning."""
     from config.consent import require_consent
 
@@ -558,7 +562,7 @@ def build_parser() -> argparse.ArgumentParser:
     feed = sub.add_parser("live-feed", help="Stream live CVEs from NVD + CISA KEV every 2s")
     feed.add_argument("--severity", default=None, choices=["CRITICAL", "HIGH", "MEDIUM", "LOW"])
     feed.add_argument("--output", choices=["json", "stream"], default="stream")
-    feed.add_argument("--interval", type=int, default=2, help="Poll interval in seconds")
+    feed.add_argument("--interval", type=int, default=7, help="Poll interval in seconds (NVD unauthed limit: 5 req/30s)")
 
     atk = sub.add_parser("attack-sim", help="MITRE ATT&CK-mapped exploit simulation")
     atk.add_argument("--target", required=True, help="Target IP, hostname, or URL")
@@ -578,9 +582,13 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--target", required=True, help="HTTP(S) URL to scan")
     web.add_argument("--headed", action="store_true", help="Show browser (default: headless)")
     web.add_argument("--output-file", default=None, help="JSON report path")
+    web.add_argument("--yes", "-y", action="store_true", default=argparse.SUPPRESS,
+                     help="Auto-confirm all interactive prompts (also: SWIFT_AUTO_CONFIRM=1)")
 
     pe = sub.add_parser("privesc", help="Docker-based privilege escalation tester")
     pe.add_argument("--repo", required=True, help="Workspace path to mount into container")
+    pe.add_argument("--yes", "-y", action="store_true", default=argparse.SUPPRESS,
+                    help="Auto-confirm all interactive prompts (also: SWIFT_AUTO_CONFIRM=1)")
     pe.add_argument("--allow-privesc", action="store_true",
                     help="Required gate: enables SYS_PTRACE cap inside disposable container")
     pe.add_argument("--image", default="ubuntu:22.04")
