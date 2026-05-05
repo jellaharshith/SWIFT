@@ -1,6 +1,32 @@
 """Web vulnerability probe payload library."""
 from __future__ import annotations
 
+from typing import Optional, List as _List
+
+
+def get_payloads(
+    vuln_type: str,
+    fallback: list,
+    anthropic_client=None,
+    framework_hints: Optional[_List[str]] = None,
+    previous_failures: Optional[_List[str]] = None,
+) -> list:
+    """Return LLM-generated payloads if client available, else return fallback constants."""
+    if anthropic_client is not None:
+        try:
+            from browser.payload_generator import generate_payloads
+            generated = generate_payloads(
+                vuln_type=vuln_type, n=8,
+                framework_hints=framework_hints,
+                previous_failures=previous_failures,
+                anthropic_client=anthropic_client,
+            )
+            if generated:
+                return generated
+        except Exception:
+            pass
+    return list(fallback)
+
 XSS_PAYLOADS = [
     "<script>window.__swift_xss=1</script>",
     "\"><svg/onload=window.__swift_xss=1>",
@@ -106,6 +132,35 @@ XXE_PAYLOADS = [
         "<foo>&xxe;</foo>"
     ),
 ]
+
+# ── Payload accessor (LLM-aware) ──────────────────────────────────────────────
+def xss_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("xss", XSS_PAYLOADS, client, hints, failures)
+
+def sqli_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("sqli", SQLI_PAYLOADS, client, hints, failures)
+
+def ssrf_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("ssrf", SSRF_PAYLOADS, client, hints, failures)
+
+def ssti_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("ssti", SSTI_PAYLOADS, client, hints, failures)
+
+def nosql_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("nosql", NOSQL_PAYLOADS, client, hints, failures)
+
+def prototype_pollution_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("prototype_pollution", PROTOTYPE_POLLUTION_PAYLOADS, client, hints, failures)
+
+def crlf_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("crlf", CRLF_PAYLOADS, client, hints, failures)
+
+def xxe_payloads(client=None, hints=None, failures=None) -> list:
+    return get_payloads("xxe", XXE_PAYLOADS, client, hints, failures)
+
+def jwt_attacks_list(client=None, hints=None, failures=None) -> list:
+    return get_payloads("jwt", list(JWT_ATTACKS.values()), client, hints, failures)
+
 
 # ── HTTP Request Smuggling ────────────────────────────────────────────────────
 # NOTE: These are payload descriptors only. Actual smuggling requires raw

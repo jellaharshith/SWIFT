@@ -15,14 +15,12 @@ def _utc_now() -> str:
 
 async def _run_code_scan(
     repo_path: str,
-    generate_patches: bool,
     progress_callback: Optional[Callable] = None,
 ) -> object:
     from agent.orchestrator import scan_codebase
     return await asyncio.to_thread(
         scan_codebase,
         repo_path,
-        generate_patches_flag=generate_patches,
         progress_callback=progress_callback,
     )
 
@@ -43,7 +41,6 @@ async def unified_scan(
     repo_path: Optional[str] = None,
     kali_target: Optional[str] = None,
     tools: Optional[List[str]] = None,
-    generate_patches: bool = False,
     skip_kali_build: bool = False,
     progress_callback: Optional[Callable] = None,
 ) -> object:
@@ -53,7 +50,6 @@ async def unified_scan(
         repo_path: Local repo path for static code analysis (None to skip).
         kali_target: Host/URL for Kali offensive scan (None to skip).
         tools: Kali tools to run (None = all).
-        generate_patches: If True, generate patches for code findings.
         skip_kali_build: Skip Kali Docker image build check.
         progress_callback: Optional progress callback forwarded to code scanner.
 
@@ -92,7 +88,7 @@ async def unified_scan(
     if repo_path:
         code_idx = len(scan_tasks)
         scan_tasks.append(asyncio.create_task(
-            _run_code_scan(repo_path, generate_patches, progress_callback)
+            _run_code_scan(repo_path, progress_callback)
         ))
 
     if kali_target:
@@ -120,9 +116,8 @@ async def unified_scan(
     # Collect all CVE matches from merged findings
     all_cve_matches = [cm for mf in merged for cm in mf.cve_matches]
 
-    # Carry exploit chains and patches from code result
+    # Carry exploit chains from code result
     exploit_chains = list(code_result.exploit_chains) if code_result else []
-    patches = list(code_result.patches) if code_result else []
 
     duration = asyncio.get_event_loop().time() - start_time
 
@@ -137,5 +132,6 @@ async def unified_scan(
         kali_only_findings=kali_only,
         all_cve_matches=all_cve_matches,
         exploit_chains=exploit_chains,
-        patches=patches,
+        osint_findings=[],
+        post_exploit_findings=[],
     )

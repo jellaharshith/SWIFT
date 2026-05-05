@@ -77,20 +77,27 @@ def prompt_and_save_consent() -> bool:
         return False
 
 
-def require_consent() -> None:
+def require_consent(args=None) -> None:
     """Ensure user consent is given, raising SystemExit if declined.
 
-    Checks if consent has been previously given. If not, prompts the user.
-    Raises SystemExit with code 1 if consent is declined.
-
-    Raises:
-        SystemExit: If consent is not given.
+    Auto-confirm (--yes / SWIFT_AUTO_CONFIRM=1) bypasses prompt and persists consent.
     """
+    from config.auto_confirm import is_auto_confirmed
+    try:
+        from log.audit import log_step
+    except ImportError:
+        log_step = None  # type: ignore
+
     if check_consent():
-        # User has already consented, proceed silently
         return
 
-    # User has not consented, prompt them
+    if is_auto_confirmed(args):
+        CONSENT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONSENT_FILE, "w") as f:
+            json.dump({"accepted": True, "auto_confirmed": True}, f)
+        if log_step:
+            log_step("consent.auto_confirmed")
+        return
+
     if not prompt_and_save_consent():
-        # User declined
         sys.exit(1)

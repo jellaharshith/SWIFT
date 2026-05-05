@@ -1,4 +1,4 @@
-from agent.models import Vulnerability, Patch, ScanResult, TestResult
+from agent.models import Vulnerability, ScanResult, TestResult, OsintFinding, PostExploitFinding
 from agent.github_cloner import clone_repo
 
-__all__ = ["Vulnerability", "Patch", "ScanResult", "TestResult", "clone_repo"]
+__all__ = ["Vulnerability", "ScanResult", "TestResult", "OsintFinding", "PostExploitFinding", "clone_repo"]

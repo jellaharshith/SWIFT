@@ -1,6 +1,18 @@
 from __future__ import annotations
 import os
-from agent.models import UnifiedScanResult, MergedFinding, EscalationPath
+from agent.models import UnifiedScanResult, MergedFinding, EscalationPath, Vulnerability
+
+
+def _vuln_to_merged(v: Vulnerability) -> MergedFinding:
+    """Wrap a code-only Vulnerability in a minimal MergedFinding for rendering."""
+    mf = MergedFinding(
+        id=v.id,
+        vuln_type=v.vuln_type,
+        severity=v.severity.upper(),
+        sources=["code"],
+        code_finding=v,
+    )
+    return mf
 
 
 def _severity_badge(severity: str) -> str:
@@ -90,7 +102,10 @@ class BugBountyFormatter:
             "---",
             "",
         ]
-        sections = [_finding_section(mf, escalation_paths) for mf in result.merged_findings]
+        findings_to_render = list(result.merged_findings) + [
+            _vuln_to_merged(v) for v in getattr(result, "code_only_findings", [])
+        ]
+        sections = [_finding_section(mf, escalation_paths) for mf in findings_to_render]
         if not sections:
             sections = ["> No findings to report."]
         return "\n".join(header) + "\n\n".join(sections)

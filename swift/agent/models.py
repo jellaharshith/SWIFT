@@ -72,18 +72,35 @@ class Vulnerability:
 
 
 @dataclass
-class Patch:
-    id: str
-    vuln_id: str
-    file_path: str
-    original_code: str
-    patched_code: str
-    diff: str
-    confidence: float
-    reasoning: Optional[str] = None
-    sandbox_tested: bool = False
-    test_passed: Optional[bool] = None
-    test_logs: Optional[str] = None
+class Credential:
+    """Captured credential from a probe chain."""
+    username: Optional[str] = None
+    password: Optional[str] = None
+    token: Optional[str] = None
+    source: str = ""          # e.g. "sqli_dump", "jwt_replay", "form_login"
+    target_url: str = ""
+
+
+@dataclass
+class OsintFinding:
+    """Finding from the OSINT recon phase."""
+    kind: str                 # "subdomain", "exposed_credential", "github_leak", "shodan_service"
+    target: str
+    evidence: str
+    source: str               # "dns_recon", "github_dorks", "shodan", "whois"
+    confidence: float = 0.8
+    severity: str = "MEDIUM"
+
+
+@dataclass
+class PostExploitFinding:
+    """Simulated post-exploitation capability assessment."""
+    kind: str                 # "data_exposure", "persistence_feasibility", "c2_feasibility"
+    description: str
+    evidence: str
+    feasibility_score: float  # 0.0-1.0
+    simulate_only: bool = True
+    vuln_chain_id: Optional[str] = None
 
 
 @dataclass
@@ -121,7 +138,6 @@ class ScanResult:
     repo_path: str
     files_scanned: int
     vulnerabilities: List[Vulnerability]
-    patches: List[Patch]
     duration_seconds: float
     total_cost_usd: float
     timestamp: str
@@ -131,18 +147,8 @@ class ScanResult:
     signals_detected: int = 0  # Total signals/findings detected
     signals_triaged: int = 0  # Signals selected for chain detection
     chain_detection_error: Optional[str] = None
-
-
-@dataclass
-class TestResult:
-    patch_id: str
-    passed: bool
-    output: str
-    exit_code: int
-
-    @property
-    def summary(self) -> str:
-        return "PASSED" if self.passed else "FAILED"
+    osint_findings: List["OsintFinding"] = field(default_factory=list)
+    post_exploit_findings: List["PostExploitFinding"] = field(default_factory=list)
 
 
 @dataclass
@@ -195,7 +201,8 @@ class UnifiedScanResult:
         kali_only_findings: Findings from Kali scan only
         all_cve_matches: All CVE matches found across scans
         exploit_chains: Exploit chains detected
-        patches: Generated patches for confirmed vulnerabilities
+        osint_findings: OSINT recon phase findings
+        post_exploit_findings: Post-exploitation capability assessments
         report_md_path: Path to generated Markdown report (if any)
         report_txt_path: Path to generated text report (if any)
     """
@@ -209,7 +216,8 @@ class UnifiedScanResult:
     kali_only_findings: List[dict] = field(default_factory=list)
     all_cve_matches: List["CVEMatch"] = field(default_factory=list)
     exploit_chains: List[ExploitChain] = field(default_factory=list)
-    patches: List[Patch] = field(default_factory=list)
+    osint_findings: List["OsintFinding"] = field(default_factory=list)
+    post_exploit_findings: List["PostExploitFinding"] = field(default_factory=list)
     report_md_path: Optional[str] = None
     report_txt_path: Optional[str] = None
 
@@ -235,3 +243,17 @@ class EscalationPath:
     severity: str
     finding_ids: List[str]
     ascii_chain: str
+
+
+@dataclass
+class TestResult:
+    """Result of running tests inside the Docker sandbox."""
+    patch_id: str
+    passed: bool
+    output: str
+    exit_code: int = 0
+    duration_seconds: float = 0.0
+
+    @property
+    def summary(self) -> str:
+        return "PASSED" if self.passed else "FAILED"

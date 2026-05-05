@@ -17,7 +17,6 @@ def _make_scan_result(repo_path: str = "/tmp/swift_clone_abc") -> ScanResult:
         repo_path=repo_path,
         files_scanned=3,
         vulnerabilities=[],
-        patches=[],
         duration_seconds=1.0,
         total_cost_usd=0.01,
         timestamp="2026-04-19T00:00:00+00:00",
@@ -52,7 +51,7 @@ class TestScanWithGitHubUrl:
             with patch("cli.commands.clone_repo", return_value=("/tmp/swift_clone_abc", cleanup_mock)):
                 with patch("cli.commands.scan_codebase", return_value=_make_scan_result()) as mock_scan:
                     runner.invoke(cli, ["scan", "--repo", "https://github.com/owner/repo"])
-        mock_scan.assert_called_once_with("/tmp/swift_clone_abc", generate_patches_flag=False)
+        mock_scan.assert_called_once_with("/tmp/swift_clone_abc")
 
     def test_scan_cleanup_called_after_success(self):
         runner = CliRunner()
@@ -114,40 +113,3 @@ class TestScanWithGitHubUrl:
         assert "scan" in data
 
 
-class TestPatchCommandWithGitHubUrl:
-    def test_patch_github_url_exits_0(self):
-        runner = CliRunner()
-        cleanup_mock = MagicMock()
-        with patch("cli.commands.is_github_url", return_value=True):
-            with patch("cli.commands.clone_repo", return_value=("/tmp/swift_clone_abc", cleanup_mock)):
-                with patch("cli.commands.scan_codebase", return_value=_make_scan_result()):
-                    result = runner.invoke(cli, ["patch", "--repo", "https://github.com/owner/repo"])
-        assert result.exit_code == 0
-
-    def test_patch_cleanup_called_on_success(self):
-        runner = CliRunner()
-        cleanup_mock = MagicMock()
-        with patch("cli.commands.is_github_url", return_value=True):
-            with patch("cli.commands.clone_repo", return_value=("/tmp/swift_clone_abc", cleanup_mock)):
-                with patch("cli.commands.scan_codebase", return_value=_make_scan_result()):
-                    runner.invoke(cli, ["patch", "--repo", "https://github.com/owner/repo"])
-        cleanup_mock.assert_called_once()
-
-    def test_patch_cleanup_called_on_failure(self):
-        runner = CliRunner()
-        cleanup_mock = MagicMock()
-        with patch("cli.commands.is_github_url", return_value=True):
-            with patch("cli.commands.clone_repo", return_value=("/tmp/swift_clone_abc", cleanup_mock)):
-                with patch("cli.commands.scan_codebase", side_effect=Exception("boom")):
-                    result = runner.invoke(cli, ["patch", "--repo", "https://github.com/owner/repo"])
-        assert result.exit_code == 1
-        cleanup_mock.assert_called_once()
-
-    def test_patch_passes_generate_patches_flag_true(self):
-        runner = CliRunner()
-        cleanup_mock = MagicMock()
-        with patch("cli.commands.is_github_url", return_value=True):
-            with patch("cli.commands.clone_repo", return_value=("/tmp/swift_clone_abc", cleanup_mock)):
-                with patch("cli.commands.scan_codebase", return_value=_make_scan_result()) as mock_scan:
-                    runner.invoke(cli, ["patch", "--repo", "https://github.com/owner/repo"])
-        mock_scan.assert_called_once_with("/tmp/swift_clone_abc", generate_patches_flag=True)

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from agent.models import Patch, ScanResult, Vulnerability
+from agent.models import ScanResult, Vulnerability
 from cli.commands import cli
 
 
@@ -24,18 +24,10 @@ def _make_vuln() -> Vulnerability:
     )
 
 
-def _make_patch() -> Patch:
-    return Patch(
-        id="PATCH-001", vuln_id="SWIFT-001", file_path="app.py",
-        original_code="old", patched_code="new", diff="--- a\n+++ b\n",
-        confidence=0.97,
-    )
-
-
-def _make_scan_result(vulns=None, patches=None) -> ScanResult:
+def _make_scan_result(vulns=None) -> ScanResult:
     return ScanResult(
         scan_id="SCAN-abc12345", repo_path="/tmp/repo", files_scanned=5,
-        vulnerabilities=vulns or [], patches=patches or [],
+        vulnerabilities=vulns or [],
         duration_seconds=1.2, total_cost_usd=0.05,
         timestamp="2026-04-19T00:00:00+00:00",
     )
@@ -93,14 +85,6 @@ class TestScanCommand:
             result = runner.invoke(cli, ["scan", "--repo", str(tmp_path)])
         assert result.exit_code == 1
 
-    def test_scan_with_patches_flag(self, tmp_path):
-        """scan --patches must call scan_codebase with generate_patches_flag=True."""
-        runner = CliRunner()
-        with patch("cli.commands.scan_codebase", return_value=_make_scan_result()) as mock_scan:
-            result = runner.invoke(cli, ["scan", "--repo", str(tmp_path), "--patches"])
-        assert result.exit_code == 0
-        mock_scan.assert_called_once_with(str(tmp_path), generate_patches_flag=True)
-
     def test_scan_writes_to_out_file(self, tmp_path):
         """scan --out-file must write output to the specified file."""
         runner = CliRunner()
@@ -112,45 +96,3 @@ class TestScanCommand:
         assert os.path.exists(out_file)
 
 
-# ---------------------------------------------------------------------------
-# patch command tests
-# ---------------------------------------------------------------------------
-
-class TestPatchCommand:
-    def test_patch_missing_repo_exits_2(self):
-        """patch without --repo must exit 2."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["patch"])
-        assert result.exit_code == 2
-
-    def test_patch_exits_0_on_success(self, tmp_path):
-        """patch command must exit 0 on success."""
-        runner = CliRunner()
-        with patch("cli.commands.scan_codebase", return_value=_make_scan_result()):
-            result = runner.invoke(cli, ["patch", "--repo", str(tmp_path)])
-        assert result.exit_code == 0
-
-    def test_patch_calls_scan_with_patches_flag(self, tmp_path):
-        """patch command must always pass generate_patches_flag=True."""
-        runner = CliRunner()
-        with patch("cli.commands.scan_codebase", return_value=_make_scan_result()) as mock_scan:
-            runner.invoke(cli, ["patch", "--repo", str(tmp_path)])
-        mock_scan.assert_called_once_with(str(tmp_path), generate_patches_flag=True)
-
-
-# ---------------------------------------------------------------------------
-# validate command tests
-# ---------------------------------------------------------------------------
-
-class TestValidateCommand:
-    def test_validate_exits_0(self):
-        """validate --patch-id must exit 0 (informational stub)."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["validate", "--patch-id", "PATCH-001"])
-        assert result.exit_code == 0
-
-    def test_validate_missing_patch_id_exits_2(self):
-        """validate without --patch-id must exit 2."""
-        runner = CliRunner()
-        result = runner.invoke(cli, ["validate"])
-        assert result.exit_code == 2

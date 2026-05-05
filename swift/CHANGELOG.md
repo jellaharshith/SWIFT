@@ -1,5 +1,20 @@
 # Changelog
 
+## v3.0.0 — Red-Team Automation Pentester (2026-05-04)
+### Breaking Changes
+- Removed `patch`, `validate`, `--allow-patch-generation` commands and flags
+- Removed `patches/` module, `patch_apply.py`, `patch_validator.py`
+### Added
+- `redteam` command: full red-team pipeline with ROE gate
+- `osint` command: DNS recon, GitHub dorks, Shodan, WHOIS
+- `Credential` model: captured credential from a probe chain
+- `OsintFinding` model: finding from the OSINT recon phase
+- `PostExploitFinding` model: simulated post-exploitation capability assessment
+- SessionManager: credential/JWT reuse across probe chains
+- LLM payload generator: context-aware payload mutation via Claude Haiku
+- Post-exploit simulators: data-exfil, persistence, C2 feasibility (simulate-only)
+- Advanced Kali: WAF evasion flags, 7 additional tools
+
 All notable changes to SWIFT are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning: [Semantic Versioning](https://semver.org/).
