@@ -57,7 +57,6 @@ def _make_result(findings=None, escalation_paths=None) -> tuple:
     result.kali_only_findings = []
     result.all_cve_matches = []
     result.exploit_chains = []
-    result.patches = []
     result.repo_path = "/tmp/myapp"
     result.kali_target = "example.com"
     return result, escalation_paths or []

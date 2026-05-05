@@ -85,7 +85,9 @@ def _mitre_techniques_from_kali(kali_finding: dict) -> list[dict]:
     """Extract MITRE ATT&CK metadata from a Kali finding dict."""
     technique: dict = {}
     if kali_finding.get("technique_id"):
-        # Store as "id" to match unified_report.py expectations
+        # Emit both keys: "technique_id" for bug_bounty/pentest formatters,
+        # "id" for unified_report.py which reads t.get('id').
+        technique["technique_id"] = kali_finding["technique_id"]
         technique["id"] = kali_finding["technique_id"]
     if kali_finding.get("technique"):
         technique["technique"] = kali_finding["technique"]

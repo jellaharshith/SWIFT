@@ -7,7 +7,7 @@ from pathlib import Path
 import click
 
 from agent.github_cloner import clone_repo, is_github_url
-from agent.orchestrator import generate_patches, scan_codebase
+from agent.orchestrator import scan_codebase
 from output.formatters import format_output
 
 
@@ -28,15 +28,8 @@ def cli() -> None:
         "report that filters noise and is demo-ready (recommended for sharing)."
     ),
 )
-@click.option(
-    "--patches",
-    "gen_patches",
-    is_flag=True,
-    default=False,
-    help="Generate and sandbox-test patches after scanning.",
-)
 @click.option("--out-file", default=None, help="Write output to file instead of stdout.")
-def scan(repo: str, output: str, gen_patches: bool, out_file: str | None) -> None:
+def scan(repo: str, output: str, out_file: str | None) -> None:
     """Scan a repository for security vulnerabilities.
 
     Runs the full triage → Haiku → Sonnet pipeline. Only findings with
@@ -51,7 +44,7 @@ def scan(repo: str, output: str, gen_patches: bool, out_file: str | None) -> Non
             repo_path = str(Path(repo).resolve())
 
         click.echo(f"Scanning {repo_path} ...", err=True)
-        result = scan_codebase(repo_path, generate_patches_flag=gen_patches)
+        result = scan_codebase(repo_path)
     except Exception as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
@@ -61,7 +54,7 @@ def scan(repo: str, output: str, gen_patches: bool, out_file: str | None) -> Non
 
     click.echo(
         f"Found {len(result.vulnerabilities)} vulnerabilities "
-        f"({len(result.patches)} patches) in {result.duration_seconds:.1f}s",
+        f"in {result.duration_seconds:.1f}s",
         err=True,
     )
 
@@ -73,68 +66,3 @@ def scan(repo: str, output: str, gen_patches: bool, out_file: str | None) -> Non
         click.echo(formatted)
 
 
-@cli.command()
-@click.option("--repo", required=True, help="Local path or GitHub URL to scan and patch.")
-@click.option(
-    "--output",
-    default="json",
-    type=click.Choice(["json", "markdown", "report"], case_sensitive=False),
-    show_default=True,
-    help=(
-        "Output format. 'report' produces a normalised, human-readable security "
-        "report that filters noise and is demo-ready (recommended for sharing)."
-    ),
-)
-@click.option("--out-file", default=None, help="Write output to file instead of stdout.")
-def patch(repo: str, output: str, out_file: str | None) -> None:
-    """Scan repository and auto-generate patches for all findings.
-
-    Each patch is validated in a Docker sandbox (--network=none, read-only FS).
-    Accepts a local path or a GitHub URL.
-    """
-    cleanup = None
-    try:
-        if is_github_url(repo):
-            click.echo(f"Cloning {repo} ...", err=True)
-            repo_path, cleanup = clone_repo(repo)
-        else:
-            repo_path = str(Path(repo).resolve())
-
-        click.echo(f"Scanning + patching {repo_path} ...", err=True)
-        result = scan_codebase(repo_path, generate_patches_flag=True)
-    except Exception as exc:
-        click.echo(f"Error: {exc}", err=True)
-        sys.exit(1)
-    finally:
-        if cleanup is not None:
-            cleanup()
-
-    click.echo(
-        f"Found {len(result.vulnerabilities)} vulnerabilities, "
-        f"generated {len(result.patches)} patches in {result.duration_seconds:.1f}s",
-        err=True,
-    )
-
-    formatted = format_output(result, output.lower())
-    if out_file:
-        Path(out_file).write_text(formatted, encoding="utf-8")
-        click.echo(f"Wrote {output.upper()} report to {out_file}", err=True)
-    else:
-        click.echo(formatted)
-
-
-@cli.command()
-@click.option("--patch-id", required=True, help="Patch ID to validate (e.g. PATCH-001).")
-def validate(patch_id: str) -> None:
-    """Validate a patch through the Docker sandbox.
-
-    Note: standalone validation requires a running scan session. Use
-    'swift patch --repo <path>' which runs sandbox validation automatically
-    during patch generation.
-    """
-    click.echo(
-        f"Standalone validation for {patch_id}: use 'swift patch --repo <path>' "
-        "to generate and validate patches in one step.",
-        err=True,
-    )
-    sys.exit(0)

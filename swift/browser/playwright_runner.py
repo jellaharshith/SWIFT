@@ -32,6 +32,7 @@ from browser.probes import (
     IDOR_PROBES,
 )
 from log.audit import log_step
+from browser.session_manager import SessionManager
 
 # Per-host probe budget in seconds. If elapsed exceeds this, stop probing.
 PER_PROBE_BUDGET_SECONDS = 60
@@ -130,13 +131,13 @@ async def _probe_sqli(page, url: str, result: BrowserScanResult) -> None:
                 for sig in SQLI_ERROR_SIGNATURES:
                     if sig in body:
                         result.findings.append(BrowserFinding(
-                            kind="sqli_error_based",
+                            kind="sqli_error",
                             severity="critical",
                             url=test_url,
                             evidence=f"db error signature: {sig}",
                             payload=payload,
                         ))
-                        log_step("browser.finding", kind="sqli_error_based", url=test_url)
+                        log_step("browser.finding", kind="sqli_error", url=test_url)
                         break
             except Exception as exc:  # noqa: BLE001
                 log_step("browser.probe.error", url=test_url, err=str(exc), level="warning")
@@ -602,6 +603,8 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
         log_step("browser.scan.unavailable", target=target, err=result.error, level="error")
         return result
 
+    session = SessionManager()
+
     try:
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=headless)
@@ -615,6 +618,7 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
             ) else None)
 
             log_step("browser.nav", target=target)
+            await session.attach(page)
             await page.goto(target, timeout=20000, wait_until="domcontentloaded")
 
             cookies = await context.cookies()
@@ -623,7 +627,10 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
                     result.insecure_cookies.append(c.get("name", "<unknown>"))
                     log_step("browser.finding", kind="insecure_cookie", name=c.get("name"))
 
-            await _probe(page, target, result, mode=mode)
+            try:
+                await _probe(page, target, result, mode=mode)
+            finally:
+                await session.capture(page)
 
             await context.close()
             await browser.close()
@@ -638,6 +645,15 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
     except Exception as exc:  # noqa: BLE001
         result.error = f"playwright runtime error: {exc}"
         log_step("browser.scan.error", target=target, err=str(exc), level="error")
+
+    # Persist session summary for chain auditor
+    import uuid
+    from pathlib import Path
+    session_path = Path(f"/tmp/swift-session-{uuid.uuid4().hex[:8]}.json")
+    try:
+        session.save(session_path)
+    except Exception:
+        pass
 
     log_step("browser.scan.finish", target=target, findings=len(result.findings))
     return result

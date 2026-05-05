@@ -52,7 +52,7 @@ class JSONFormatter:
                 "files_scanned": result.files_scanned,
                 "vulnerabilities_found": len(result.vulnerabilities),
                 "by_severity": by_severity,
-                "patches_generated": len(result.patches),
+                "redteam_findings": 0,
             },
             "vulnerabilities": [
                 {
@@ -84,18 +84,8 @@ class JSONFormatter:
                 }
                 for v in result.vulnerabilities
             ],
-            "patches": [
-                {
-                    "id": p.id,
-                    "vuln_id": p.vuln_id,
-                    "file_path": p.file_path,
-                    "original_code": p.original_code,
-                    "patched_code": p.patched_code,
-                    "diff": p.diff,
-                    "confidence": p.confidence,
-                }
-                for p in result.patches
-            ],
+            "osint_findings": [],    # will be populated once OSINT is wired
+            "post_exploit_findings": [],
             "exploit_chains": [
                 {
                     "chain_id": c.chain_id,
@@ -198,7 +188,6 @@ class MarkdownFormatter:
         lines.append("")
         lines.append(f"- **Files scanned:** {result.files_scanned}")
         lines.append(f"- **Vulnerabilities found:** {len(result.vulnerabilities)}")
-        lines.append(f"- **Patches generated:** {len(result.patches)}")
         lines.append("")
 
         # --- Vulnerabilities ---
@@ -281,17 +270,7 @@ class MarkdownFormatter:
                         lines.append(f"  {line}")
                 lines.append("")
 
-        # --- Patches (omitted when empty) ---
-        if result.patches:
-            lines.append("## Patches")
-            lines.append("")
-            for patch in result.patches:
-                lines.append(f"### {patch.id} → {patch.vuln_id}")
-                lines.append("")
-                lines.append("```diff")
-                lines.append(patch.diff)
-                lines.append("```")
-                lines.append("")
+        # TODO: add osint_findings and post_exploit_findings sections
 
         return "\n".join(lines)
 

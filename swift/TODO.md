@@ -1,63 +1,68 @@
-# SWIFT MVP — TO-DO
+# SWIFT v3.0 — Red-Team Automation Pentester
 
-## Status Legend
+## Status: IN PROGRESS (sub-agents dispatched 2026-05-04)
 
-- ✅ DONE
-- 🔄 IN PROGRESS
-- ⬜ PENDING
+## Objective
+Transform SWIFT from a defensive scanner into a full red-team automation tool.
+Remove patching feature. Add: ROE gate, OSINT, SessionManager, LLM payloads, post-exploit sim, advanced Kali.
+All offensive ops sandboxed. Simulate-only post-exploit.
 
-## Security
+---
 
-### ✅ API Key Exposure — Fix .gitignore (2026-04-19)
+## Part A — Patch Feature Excision [ ]
+- [ ] Delete patches/, patch_apply.py, patch_validator.py
+- [ ] Delete test/integration/test_patch_generator.py
+- [ ] Edit agent/orchestrator.py — remove generate_patches_flag, Phase-4 block, generate_patches(), PatchGenerator import
+- [ ] Edit agent/unified_orchestrator.py — remove generate_patches param
+- [ ] Edit agent/models.py — drop Patch + ScanResult.patches; add OsintFinding, PostExploitFinding, Credential, RedTeamResult
+- [ ] Edit swift_cli.py — remove patch/validate cmds + --allow-patch-generation; add redteam/osint stubs
+- [ ] Edit cli/commands.py — remove patch Click command
+- [ ] Edit output/formatters.py, report_normalizer.py, unified_report.py — remove patches sections
+- [ ] Edit CLAUDE.md, README.md, CHANGELOG.md — update docs
 
-- `.gitignore` had `.env/` (directory) not `.env` (file)
-- Fixed: now has `.env` and `**/.env`
-- Git history checked: key was NEVER committed — safe
-- `swift/.env` now correctly git-ignored
+## Part B — Security Infra: ROE Gate + RedTeam Sandbox [ ]
+- [ ] Create security/roe.py — ROE dataclass, load_roe(), assert_target_in_scope(), assert_technique_allowed(), assert_window_active()
+- [ ] Create sandbox/redteam_workbench.py — RedTeamSandbox using kalilinux/kali-rolling, network-scoped to target, ephemeral
+- [ ] Create roe.example.yaml — starter template
+- [ ] Update requirement.txt — add python-whois, dnspython, shodan, PyGithub, cryptography, httpx[http2]
 
-## Deployment
+## Part C — OSINT Phase [ ]
+- [ ] Create osint/dns_recon.py — AXFR, subdomain enum via amass+subfinder, crt.sh, dnsx
+- [ ] Create osint/whois_asn.py — whois + team-cymru ASN
+- [ ] Create osint/github_dorks.py — GitHub code search for leaked secrets/endpoints
+- [ ] Create osint/shodan_query.py — Shodan host lookup (optional, key-gated)
+- [ ] Create osint/runner.py — async run_osint(roe) → OsintResult; feeds exploit_graph
 
-### ✅ Deploy to Fly.io (2026-04-20)
+## Part D — Browser: SessionManager + LLM Payloads [ ]
+- [ ] Create browser/session_manager.py — shared cookie/JWT/header state across probes
+- [ ] Create browser/payload_generator.py — Haiku-backed mutated payload gen with prompt cache
+- [ ] Edit browser/probes.py — async wrapper calls generator; hardcoded as fallback
+- [ ] Edit browser/playwright_runner.py — thread SessionManager, capture after each probe
 
-Deployed to `swift-scanner.fly.dev`. Config: `min_machines_running=1`, `auto_start_machines=true`, `auto_stop_machines=true`.
+## Part E — Post-Exploit Simulators [ ]
+- [ ] Create post_exploit/data_exfil_sim.py — count rows/IDs, PII heuristic, no real pull
+- [ ] Create post_exploit/persistence_sim.py — detect writable cron/.ssh/systemd, score feasibility
+- [ ] Create post_exploit/c2_sim.py — DNS canary egress test, no real C2
 
-### ⬜ Fix Fly.io trial 5-minute machine kill
+## Part F — Kali + Persona + Graph Upgrades [ ]
+- [ ] Edit kali/runner.py — add wfuzz, ffuf, httpx, subfinder, amass, feroxbuster; WAF evasion flags
+- [ ] Edit triage/exploit_graph.py — new node classes (exposed_credential, data_exposure, c2_feasibility); MAX_CHAIN_DEPTH 3→5
+- [ ] Edit agent/pentester_persona.py — extend preamble with OSINT + post-exploit node reasoning
 
-**Root cause:** Fly.io free trial kills machines after 5 min → `"failed to fetch"` on frontend.
-**Confirmed via logs:** `"Trial machine stopping. To run for longer than 5m0s, add a credit card"`
+## Part G — Integration & Verification [ ]
+- [ ] Wire swift redteam command: ROE → sandbox → OSINT → codescan → web probes → Kali → chains → post-exploit → report
+- [ ] Create output/redteam_report.py
+- [ ] Run pytest swift/test/ — coverage ≥ 80%
+- [ ] E2E on Juice-Shop: ≥3 confirmed vulns, ≥1 chain crossing ≥3 nodes
 
-**Options (pick one):**
-- A) Add credit card at `https://fly.io/dashboard/jellaharshith/billing` — Hobby tier free for low usage, removes kill timer
-- B) Migrate backend to Railway (free $5/mo credit, no kill timer): `railway init && railway up`
+---
 
-Machine config already correct — will work once billing added.
-
-## Phase 1 — Exploit Chain Intelligence 🔄 IN PROGRESS
-
-- ✅ ExploitChain data model added to models.py
-- ✅ Extended Vulnerability with cwe_id, exploit_description, remediation
-- ✅ Extended Patch with reasoning, sandbox_tested, test_passed, test_logs
-- ✅ Extended ScanResult with exploit_chains list
-- ✅ ExploitChainDetector (chains/detector.py) using Sonnet
-- ✅ Language-aware prompts in Haiku + Sonnet scanners
-- ✅ Orchestrator Phase 3.5: chain detection between Sonnet and patch
-- ✅ JSON output formatter: added exploit_chains section
-- ✅ Markdown output formatter: added Exploit Chains section
-- 🔄 Tests (unit + integration)
-- 🔄 Verification (pytest, manual scan)
-
-## Phase 2 — Security Controls ⬜ PENDING
-
-- Permission enforcement layer (wrap all tool calls)
-- Append-only tamper-evident forensic audit log
-- AI safety monitor (detect escalation, hidden reasoning, unauthorized actions)
-- Compliance readiness validation
-
-## Phase 3 — Evidence Bundle + Compliance ⬜ PENDING
-
-- findings.json (CWE, exploit_description, remediation)
-- exploit_chains.json (standalone export)
-- SARIF output format
-- Enhanced triage ranking (severity × exploitability × confidence × business impact)
-- Patch diffs with sandbox test results embedded
-- /scan/{id}/evidence API endpoint
+## Done
+- [x] Unified scanner pipeline (Layers 1-7)
+- [x] Playwright probes (12 types)
+- [x] Haiku triage → Sonnet analysis → 95% confidence gate
+- [x] Exploit chain graph (DFS, bounded)
+- [x] Pentester persona prompting
+- [x] Kali Docker runner (nmap, nikto, sqlmap, nuclei, gobuster)
+- [x] PrivEsc runner (Docker sandbox)
+- [x] Bug bounty + pentest report formatters

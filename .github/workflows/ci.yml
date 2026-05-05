@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["main", "develop"]
+
+defaults:
+  run:
+    working-directory: swift
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check .
+        continue-on-error: true
+
+      - name: Format check (ruff)
+        run: ruff format --check .
+        continue-on-error: true
+
+      - name: Type check (mypy)
+        run: mypy swift_cli.py cli config log --ignore-missing-imports
+        continue-on-error: true
+
+      - name: Run tests
+        run: pytest -m "not slow and not e2e and not integration" --cov=. --cov-report=xml --cov-report=term-missing
+        env:
+          SWIFT_NO_BANNER: "1"
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.12'
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false

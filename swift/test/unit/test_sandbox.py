@@ -8,12 +8,27 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent.models import Patch, TestResult
+from dataclasses import dataclass
+from typing import Optional
+from agent.models import TestResult
 from sandbox.docker_runner import DockerSandbox
 
 
-def _make_patch() -> Patch:
-    return Patch(
+@dataclass
+class _PatchStub:
+    """Minimal Patch stub for sandbox test isolation (Patch class removed in v3.0)."""
+    id: str
+    vuln_id: str
+    file_path: str
+    original_code: str
+    patched_code: str
+    diff: str
+    confidence: float
+    reasoning: Optional[str] = None
+
+
+def _make_patch() -> _PatchStub:
+    return _PatchStub(
         id="PATCH-001",
         vuln_id="SWIFT-001",
         file_path="app.py",

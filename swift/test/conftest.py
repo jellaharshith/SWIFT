@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 import config.settings as _settings
-from agent.models import AttackStep, ExploitChain, Patch, ScanResult, TestResult, Vulnerability
+from agent.models import AttackStep, ExploitChain, ScanResult, TestResult, Vulnerability
 
 
 # ---------------------------------------------------------------------------
@@ -56,36 +56,14 @@ def low_confidence_vulnerability() -> Vulnerability:
 
 
 @pytest.fixture()
-def sample_patch(sample_vulnerability: Vulnerability) -> Patch:
-    return Patch(
-        id="PATCH-001",
-        vuln_id=sample_vulnerability.id,
-        file_path=sample_vulnerability.file_path,
-        original_code=sample_vulnerability.code_snippet,
-        patched_code='query = "SELECT * FROM users WHERE id=?"\ncursor.execute(query, (user_id,))',
-        diff=(
-            "--- a/app.py\n"
-            "+++ b/app.py\n"
-            "@@ -12 +12,2 @@\n"
-            '-query = f"SELECT * FROM users WHERE id={user_id}"\n'
-            '+query = "SELECT * FROM users WHERE id=?"\n'
-            "+cursor.execute(query, (user_id,))\n"
-        ),
-        confidence=0.97,
-    )
-
-
-@pytest.fixture()
 def sample_scan_result(
     sample_vulnerability: Vulnerability,
-    sample_patch: Patch,
 ) -> ScanResult:
     return ScanResult(
         scan_id="scan-abc12345",
         repo_path="/tmp/test-repo",
         files_scanned=3,
         vulnerabilities=[sample_vulnerability],
-        patches=[sample_patch],
         duration_seconds=1.5,
         total_cost_usd=0.12,
         timestamp="2026-04-19T10:00:00+00:00",
@@ -99,7 +77,6 @@ def empty_scan_result() -> ScanResult:
         repo_path="/tmp/empty-repo",
         files_scanned=0,
         vulnerabilities=[],
-        patches=[],
         duration_seconds=0.1,
         total_cost_usd=0.0,
         timestamp="2026-04-19T10:00:00+00:00",
@@ -137,7 +114,6 @@ def sample_exploit_chain() -> ExploitChain:
 @pytest.fixture()
 def sample_scan_result_with_chains(
     sample_vulnerability: Vulnerability,
-    sample_patch: Patch,
     sample_exploit_chain: ExploitChain,
 ) -> ScanResult:
     return ScanResult(
@@ -145,7 +121,6 @@ def sample_scan_result_with_chains(
         repo_path="/tmp/test-repo",
         files_scanned=3,
         vulnerabilities=[sample_vulnerability],
-        patches=[sample_patch],
         duration_seconds=1.5,
         total_cost_usd=0.12,
         timestamp="2026-04-19T10:00:00+00:00",
@@ -192,30 +167,3 @@ def mock_sonnet_vuln_response(mock_anthropic_client: MagicMock) -> MagicMock:
     return mock_anthropic_client
 
 
-@pytest.fixture()
-def mock_patch_response(mock_anthropic_client: MagicMock) -> MagicMock:
-    """Sonnet client returning 3 patch candidates."""
-    import json
-
-    mock_anthropic_client.messages.create.return_value.content[0].text = json.dumps(
-        {
-            "candidates": [
-                {
-                    "patched_code": 'query = "SELECT * FROM users WHERE id=?"\ncursor.execute(query, (user_id,))',
-                    "reasoning": "Use parameterized query to prevent SQL injection",
-                    "lines_changed": 2,
-                },
-                {
-                    "patched_code": 'query = "SELECT * FROM users WHERE id=%s"\ncursor.execute(query, [user_id])',
-                    "reasoning": "Use %s placeholder for DB-API compatibility",
-                    "lines_changed": 2,
-                },
-                {
-                    "patched_code": "stmt = select(users).where(users.c.id == user_id)",
-                    "reasoning": "Use SQLAlchemy ORM to avoid raw SQL",
-                    "lines_changed": 1,
-                },
-            ]
-        }
-    )
-    return mock_anthropic_client

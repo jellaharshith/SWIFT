@@ -25,7 +25,7 @@ class UnifiedReportFormatter:
         sections.append(self._md_kali_only_findings(result))
         sections.append(self._md_cve_matches(result))
         sections.append(self._md_exploit_chains(result))
-        sections.append(self._md_patches(result))
+        # TODO: add osint_findings and post_exploit_findings sections
         return "\n\n".join(s for s in sections if s)
 
     def format_txt(self, result: "UnifiedScanResult") -> str:
@@ -211,26 +211,6 @@ class UnifiedReportFormatter:
             lines.append(f"**Chain ID:** `{ec.chain_id}`")
             lines.append(f"**Attack Path:** {ec.attack_path}")
             lines.append(f"**Impact:** {ec.impact}")
-            lines.append("")
-        return "\n".join(lines)
-
-    def _md_patches(self, result: "UnifiedScanResult") -> str:
-        if not result.patches:
-            return ""
-        lines = ["## Patches", ""]
-        for p in result.patches:
-            lines.append(f"### Patch {p.id}")
-            lines.append(f"**File:** `{p.file_path}`")
-            lines.append(f"**Vuln ID:** {p.vuln_id}")
-            # First 20 lines of diff
-            all_diff_lines = p.diff.splitlines()
-            diff_lines = all_diff_lines[:20]
-            truncated = len(all_diff_lines) > 20
-            lines.append("```diff")
-            lines.extend(diff_lines)
-            if truncated:
-                lines.append("... (truncated)")
-            lines.append("```")
             lines.append("")
         return "\n".join(lines)
 
