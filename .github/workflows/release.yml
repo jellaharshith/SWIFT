@@ -14,6 +14,9 @@ jobs:
   build:
     name: Build distribution
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: swift
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
