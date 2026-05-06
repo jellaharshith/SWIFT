@@ -106,16 +106,46 @@ def run_triage(args: argparse.Namespace) -> dict[str, Any]:
     return run_scan(args)
 
 
-def run_redteam(args: argparse.Namespace) -> dict:
-    """Full red-team pipeline: ROE → OSINT → scan → probes → Kali → chains → post-exploit."""
-    print("[redteam] Not yet fully wired — run: swift web-scan + swift kali-scan + swift osint")
-    return {"status": "stub", "message": "redteam command coming in next integration step"}
+def run_redteam(args: argparse.Namespace) -> dict[str, Any]:
+    """Full red-team pipeline: ROE → OSINT → code → web + Kali → exploit chains → post-exploit sim."""
+    from pathlib import Path
+
+    from agent.redteam_orchestrator import execute_redteam, save_redteam_artifact
+    from config.consent import require_consent
+
+    require_consent(args)
+    log_step("cli.redteam.start", roe=args.roe, target=getattr(args, "target", None))
+    payload = asyncio.run(execute_redteam(args))
+    eng = payload.get("engagement_id", "engagement")
+    out_path = (
+        Path(args.output_file)
+        if getattr(args, "output_file", None)
+        else Path(f"redteam-{eng}.json")
+    )
+    save_redteam_artifact(payload, out_path)
+    payload["artifact"] = str(out_path.resolve())
+    log_step("cli.redteam.finish", artifact=str(out_path), status=payload.get("status"))
+    return payload
 
 
-def run_osint(args: argparse.Namespace) -> dict:
-    """OSINT recon phase: DNS, subdomain, GitHub dorks, Shodan, WHOIS."""
-    print("[osint] Not yet fully wired — OSINT modules created separately")
-    return {"status": "stub", "message": "osint command coming in next integration step"}
+def run_osint(args: argparse.Namespace) -> dict[str, Any]:
+    """OSINT recon phase: DNS, subdomain, GitHub dorks, Shodan, WHOIS (ROE-scoped)."""
+    from pathlib import Path
+
+    from config.consent import require_consent
+    from osint.runner import run_osint as run_osint_pipeline
+    from security.roe import load_roe, validate_all
+
+    require_consent(args)
+    roe = load_roe(args.roe)
+    validate_all(roe, args.target, "osint")
+    log_step("cli.osint.start", target=args.target)
+    result = asyncio.run(run_osint_pipeline(args.target, roe=roe))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(result.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+    log_step("cli.osint.finish", artifact=str(out), findings=result.to_dict().get("total_findings"))
+    return {"status": "ok", "artifact": str(out.resolve()), "target": args.target}
 
 
 def run_report(args: argparse.Namespace) -> dict[str, Any]:
@@ -495,16 +525,72 @@ def build_parser() -> argparse.ArgumentParser:
 
     redteam = sub.add_parser("redteam", help="Full red-team pipeline (ROE required)")
     redteam.add_argument("--roe", required=True, help="Path to rules-of-engagement YAML")
-    redteam.add_argument("--repo", default=None)
-    redteam.add_argument("--target", default=None)
+    redteam.add_argument("--repo", default=None, help="Local repo for static analysis / chaining")
+    redteam.add_argument("--target", default=None, help="URL or host for OSINT, web scan, and Kali")
     redteam.add_argument("--phases", default="osint,active,chain,postex",
-                         help="Comma-separated phases to run")
+                         help="Comma-separated: osint, code, active, chain, postex")
     redteam.add_argument("--max-runtime", type=int, default=1800)
-    redteam.add_argument("--no-llm-payloads", action="store_true")
+    redteam.add_argument("--no-llm-payloads", action="store_true",
+                         help="Skip LLM chain narrative enhancement (deterministic chains only)")
+    redteam.add_argument("--headed", action="store_true",
+                         help="Run Playwright web probe with a visible browser")
+    redteam.add_argument("--skip-build", action="store_true",
+                         help="Skip Kali Docker image build check")
+    redteam.add_argument("--output-file", default=None, help="Path for combined JSON report")
+    redteam.add_argument(
+        "--kali-tools",
+        default=None,
+        help="Comma-separated Kali tools (default: all). Example: nmap,nikto,nuclei",
+    )
+    redteam.add_argument(
+        "--no-cve-snapshot",
+        action="store_true",
+        help="Skip one-shot NVD+KEV fetch used for correlation (faster / air-gapped)",
+    )
+    redteam.add_argument(
+        "--allow-privesc",
+        action="store_true",
+        help="When phase 'privesc' is in --phases, run Docker privesc probes (requires --repo)",
+    )
+    redteam.add_argument("--privesc-image", default="ubuntu:22.04", help="Container image for privesc phase")
+    redteam.add_argument("--privesc-timeout", type=int, default=120, help="Privesc container timeout seconds")
 
     osint = sub.add_parser("osint", help="OSINT recon: DNS, GitHub dorks, Shodan, WHOIS")
     osint.add_argument("--roe", required=True)
+    osint.add_argument("--target", required=True, help="Domain or URL in ROE scope")
     osint.add_argument("--out", default="osint.json")
+    osint.add_argument("--full", action="store_true", help="Run full 10-source OSINT (includes crt.sh, wayback, tech fingerprint, email enum, subdomain takeover)")
+
+    # ── Payload management ─────────────────────────────────────────────────
+    payload_p = sub.add_parser("payload", help="Manage custom payload library")
+    payload_sub = payload_p.add_subparsers(dest="payload_cmd", required=True)
+
+    payload_add = payload_sub.add_parser("add", help="Add payloads from a file")
+    payload_add.add_argument("filepath", help="Path to payload file (one payload per line)")
+    payload_add.add_argument("--vuln-type", required=True, dest="vuln_type",
+                             help="Vulnerability type (xss, sqli, ssrf, ssti, idor, etc.)")
+
+    payload_list = payload_sub.add_parser("list", help="List registered payloads")
+    payload_list.add_argument("--vuln-type", default=None, dest="vuln_type",
+                              help="Filter by vulnerability type")
+
+    payload_remove = payload_sub.add_parser("remove", help="Remove a payload")
+    payload_remove.add_argument("--vuln-type", required=True, dest="vuln_type")
+    payload_remove.add_argument("--payload", required=True, help="Exact payload string to remove")
+
+    # ── Niche classifier ───────────────────────────────────────────────────
+    niche_p = sub.add_parser("niche", help="Classify OWASP/CWE niches for a target via Sonnet")
+    niche_p.add_argument("--roe", required=True, help="Path to ROE YAML")
+    niche_p.add_argument("--target", required=True, help="Target domain or URL")
+    niche_p.add_argument("--yes", "-y", action="store_true", default=argparse.SUPPRESS)
+
+    # ── Chain executor ─────────────────────────────────────────────────────
+    chain_p = sub.add_parser("chain", help="Replay an attack chain (ROE required, sandbox targets only)")
+    chain_p.add_argument("--execute", required=True, dest="chain_id", metavar="CHAIN_ID",
+                         help="Chain ID to execute (loads chain-<id>.json from --out-dir)")
+    chain_p.add_argument("--roe", required=True, help="Path to ROE YAML (allow_chain_execution must be true)")
+    chain_p.add_argument("--out-dir", default="output", dest="out_dir",
+                         help="Directory containing chain JSON files and for saving evidence")
 
     sub.add_parser(
         "wizard",
@@ -583,6 +669,87 @@ def uuid_safe(s: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in s)[:48]
 
 
+# ─── WS5/WS6 CLI Handlers ─────────────────────────────────────────────────────
+
+def run_payload(args: argparse.Namespace) -> dict[str, Any]:
+    """Manage custom payload library: add, list, or remove payloads."""
+    from browser.payload_library import PayloadLibrary
+
+    lib = PayloadLibrary()
+    subcmd = args.payload_cmd
+
+    if subcmd == "add":
+        from browser.payload_uploader import upload_payloads
+        result = upload_payloads(args.filepath, args.vuln_type)
+        return {"status": "ok", "added": result}
+
+    if subcmd == "list":
+        vuln_type = getattr(args, "vuln_type", None)
+        payloads = lib.list_payloads(vuln_type=vuln_type)
+        return {"status": "ok", "payloads": payloads}
+
+    if subcmd == "remove":
+        removed = lib.remove_payload(vuln_type=args.vuln_type, payload=args.payload)
+        return {"status": "ok", "removed": removed}
+
+    _fail_closed(f"Unknown payload subcommand: {subcmd}")
+
+
+def run_niche(args: argparse.Namespace) -> dict[str, Any]:
+    """Run OSINT then classify niches for a target."""
+    from config.consent import require_consent
+    from security.roe import load_roe, validate_all
+    from osint.runner import run_osint as run_osint_pipeline
+
+    require_consent(args)
+    roe = load_roe(args.roe)
+    validate_all(roe, args.target, "osint")
+    log_step("cli.niche.start", target=args.target)
+
+    osint_result = asyncio.run(run_osint_pipeline(args.target, roe=roe))
+
+    try:
+        from agent.niche_classifier import classify_niches
+        import anthropic
+        client = anthropic.Anthropic()
+        profile = asyncio.run(classify_niches(args.target, osint_result, client=client))
+        profile_dict = profile.__dict__ if hasattr(profile, "__dict__") else str(profile)
+    except Exception as exc:  # noqa: BLE001
+        log_step("cli.niche.error", err=str(exc), level="warning")
+        profile_dict = {"error": str(exc)}
+
+    log_step("cli.niche.finish", target=args.target)
+    print(json.dumps(profile_dict, indent=2, default=str))
+    return {"status": "ok", "target": args.target, "niche_profile": profile_dict}
+
+
+def run_chain_execute(args: argparse.Namespace) -> dict[str, Any]:
+    """Load a chain from output dir and execute it (ROE required)."""
+    from security.roe import load_roe
+    from agent.chain_executor import execute_chain
+
+    roe = load_roe(args.roe)
+    chain_id = args.chain_id
+
+    chain_file = Path(args.out_dir) / f"chain-{chain_id}.json"
+    if not chain_file.exists():
+        _fail_closed(f"Chain file not found: {chain_file}")
+
+    chain_data = json.loads(chain_file.read_text(encoding="utf-8"))
+    log_step("cli.chain_execute.start", chain_id=chain_id)
+    result = asyncio.run(execute_chain(chain_data, roe, out_dir=args.out_dir))
+    log_step("cli.chain_execute.finish", chain_id=chain_id, validated=result.validated)
+    return {
+        "status": "ok",
+        "chain_id": result.chain_id,
+        "validated": result.validated,
+        "steps_attempted": result.steps_attempted,
+        "steps_succeeded": result.steps_succeeded,
+        "evidence": result.evidence,
+        "error": result.error,
+    }
+
+
 def main() -> None:
     from log.logger import get_logger
     from cli.repl import run_repl, NO_JSON_DUMP_CMDS
@@ -606,6 +773,9 @@ def main() -> None:
             "privesc": run_privesc,
             "redteam": run_redteam,
             "osint": run_osint,
+            "payload": run_payload,
+            "niche": run_niche,
+            "chain": run_chain_execute,
         }
         sys.exit(run_repl(parser, handlers))
 
@@ -623,7 +793,8 @@ def main() -> None:
         _load_config(args.config)
 
     if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan",
-                             "wizard", "web-scan", "privesc"}:
+                             "wizard", "web-scan", "privesc", "redteam", "osint",
+                             "payload", "niche", "chain"}:
         _ensure_zero_trust(args)
 
     handlers = {
@@ -640,6 +811,9 @@ def main() -> None:
         "privesc": run_privesc,
         "redteam": run_redteam,
         "osint": run_osint,
+        "payload": run_payload,
+        "niche": run_niche,
+        "chain": run_chain_execute,
     }
     try:
         payload = handlers[args.command](args)
