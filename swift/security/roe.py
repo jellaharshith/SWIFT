@@ -28,13 +28,18 @@ class ROE:
     contact: str
     max_runtime_seconds: int = 1800
     simulate_only: bool = True
+    allow_chain_execution: bool = False  # must be True to replay live attack chains
     roe_sha256: str = ""           # populated by load_roe()
 
 
 def load_roe(path: Path | str) -> ROE:
     """Load and validate a ROE YAML file. Fail-closed on any error."""
     if yaml is None:
-        _deny("PyYAML not installed. Run: pip install pyyaml")
+        _deny(
+            "PyYAML not installed for this Python. "
+            "If you use Homebrew Python: python3 -m pip install pyyaml "
+            "(must match the interpreter that runs swiftsec)"
+        )
     p = Path(path).resolve()
     if not p.exists():
         _deny(f"ROE file not found: {p}  --  create one with: swift --init-roe {p}")
@@ -57,6 +62,17 @@ def load_roe(path: Path | str) -> ROE:
             return v.replace(tzinfo=timezone.utc) if v.tzinfo is None else v
         return datetime.fromisoformat(str(v)).replace(tzinfo=timezone.utc)
 
+    allow_chain_exec = bool(data.get("allow_chain_execution", False))
+    simulate_only = bool(data.get("simulate_only", True))
+    if allow_chain_exec and simulate_only:
+        import warnings
+        warnings.warn(
+            f"[ROE WARNING] engagement '{data['engagement_id']}': "
+            "allow_chain_execution=True with simulate_only=True is contradictory. "
+            "Chain execution will only proceed if allow_chain_execution is explicitly set.",
+            stacklevel=2,
+        )
+
     return ROE(
         engagement_id=data["engagement_id"],
         authorized_targets=list(data["authorized_targets"]),
@@ -65,7 +81,8 @@ def load_roe(path: Path | str) -> ROE:
         window_end=_parse_dt(data["window_end"]),
         contact=data["contact"],
         max_runtime_seconds=int(data.get("max_runtime_seconds", 1800)),
-        simulate_only=bool(data.get("simulate_only", True)),
+        simulate_only=simulate_only,
+        allow_chain_execution=allow_chain_exec,
         roe_sha256=sha,
     )
 
@@ -113,3 +130,53 @@ def validate_all(roe: ROE, target: str, technique: str) -> None:
 def _deny(message: str) -> None:
     print(f"[DENY] {message}", file=sys.stderr)
     sys.exit(2)
+
+
+def load_scope(scope_path: str | Path | None) -> dict:
+    """Load scope JSON file (HackerOne/Bugcrowd format).
+
+    Expected format:
+    {
+      "in_scope": ["example.com", "*.example.com", "api.example.com"],
+      "out_of_scope": ["staging.example.com", "admin.example.com"],
+      "allowed_asset_types": ["URL", "WILDCARD"],
+      "notes": "..."
+    }
+
+    Returns empty dict (allow-all) if scope_path is None.
+    """
+    if scope_path is None:
+        return {}
+    p = Path(scope_path).resolve()
+    if not p.exists():
+        _deny(f"Scope file not found: {p}")
+    try:
+        import json
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        _deny(f"Scope file parse error: {e}")
+    if "in_scope" not in data:
+        _deny("Scope file missing required key: 'in_scope'")
+    return data
+
+
+def assert_scope_file(scope: dict, target: str) -> None:
+    """Verify target matches scope file. Fail-closed if not in scope."""
+    if not scope:
+        return  # no scope file = allow all (ROE is the gate)
+    in_scope = scope.get("in_scope", [])
+    out_of_scope = scope.get("out_of_scope", [])
+
+    import fnmatch
+
+    # Check out-of-scope first (deny wins)
+    for pattern in out_of_scope:
+        if fnmatch.fnmatch(target, pattern) or target.endswith(pattern.lstrip("*")):
+            _deny(f"Target {target!r} matches out-of-scope pattern {pattern!r}")
+
+    # Check in-scope
+    for pattern in in_scope:
+        if fnmatch.fnmatch(target, pattern) or target == pattern or target.endswith("." + pattern.lstrip("*.")):
+            return
+
+    _deny(f"Target {target!r} not found in scope. In-scope: {in_scope}")
