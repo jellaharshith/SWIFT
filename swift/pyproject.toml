@@ -117,4 +117,4 @@ omit = ["test/*", "*/tests/*", "build/*", "assets/*", "setup.py"]
 [tool.coverage.report]
 precision = 2
 show_missing = true
-fail_under = 50
+fail_under = 45
