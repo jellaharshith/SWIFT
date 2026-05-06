@@ -65,7 +65,7 @@ py-modules = [
 ]
 packages = [
   "agent", "analysis", "browser", "chains", "cli", "config", "feeds",
-  "kali", "log", "network", "osint", "output", "post_exploit", "sandbox", "scanners",
+  "kali", "log", "osint", "output", "post_exploit", "sandbox", "scanners",
   "security", "server", "tools", "triage", "utils",
   "swift", "assets", "assets.logo",
 ]
