@@ -49,16 +49,37 @@ def generate_payloads(
     previous_failures: Optional[List[str]] = None,
     anthropic_client=None,
     model: str = "claude-haiku-4-5-20251001",
+    payload_library=None,
 ) -> List[str]:
     """Generate N payloads for vuln_type via Claude Haiku.
 
+    Merge order: user (payload_library) > LLM > builtin.
     Falls back to empty list (caller should use hardcoded library) if:
     - anthropic_client is None
     - API call fails
     - Cached result exists for this exact context
+
+    Args:
+        vuln_type: Vulnerability type key.
+        n: Number of LLM-generated payloads to request.
+        framework_hints: Detected tech stack hints.
+        previous_failures: Payloads that already failed (avoid regenerating).
+        anthropic_client: Anthropic SDK client instance.
+        model: Claude model ID for generation.
+        payload_library: Optional PayloadLibrary instance for user payloads.
+
+    Returns:
+        Merged list: user payloads first, then LLM payloads.
     """
+    user_payloads: List[str] = []
+    if payload_library is not None:
+        try:
+            user_payloads = payload_library.get_user_payloads(vuln_type)
+        except Exception:
+            pass
+
     if anthropic_client is None:
-        return []
+        return user_payloads
 
     cache_key = hashlib.sha256(
         json.dumps({
@@ -96,12 +117,12 @@ def generate_payloads(
             messages=[{"role": "user", "content": user_message}],
         )
         raw = resp.content[0].text.strip()
-        payloads = [line.strip() for line in raw.splitlines() if line.strip()][:n]
-        _CACHE[cache_key] = payloads
-        return payloads
+        llm_payloads = [line.strip() for line in raw.splitlines() if line.strip()][:n]
+        _CACHE[cache_key] = llm_payloads
+        return user_payloads + llm_payloads
     except Exception as e:
         print(f"[payload_generator] Haiku call failed ({vuln_type}): {e} — using hardcoded fallback")
-        return []
+        return user_payloads
 
 
 def generate_payloads_async_safe(

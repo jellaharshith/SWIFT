@@ -18,13 +18,24 @@ import time
 from dataclasses import asdict
 from typing import Any, List, Optional
 
+import psutil
+
 from agent.models import AttackStep, ExploitChain, Vulnerability
 from log.logger import get_logger
-from triage.exploit_graph import (
-    MAX_MODEL_CHAIN_INPUT_CHARS,
-    MAX_RANKED_CHAINS,
-    _is_memory_safe,
-)
+
+# Constants formerly in triage.exploit_graph (now inlined after triage deletion)
+MAX_MODEL_CHAIN_INPUT_CHARS: int = 40_000
+MAX_RANKED_CHAINS: int = 10
+_MEMORY_SAFE_THRESHOLD_MB: int = 500
+
+
+def _is_memory_safe(label: str) -> bool:  # noqa: ARG001
+    """Return True if process RSS is below the safety threshold."""
+    try:
+        rss_mb = psutil.Process().memory_info().rss / 1024 / 1024
+        return rss_mb < _MEMORY_SAFE_THRESHOLD_MB
+    except Exception:  # noqa: BLE001
+        return True
 
 logger = get_logger()
 
@@ -249,7 +260,10 @@ class ExploitChainDetector:
     # ------------------------------------------------------------------
 
     def detect_chains(
-        self, vulnerabilities: List[Vulnerability]
+        self,
+        vulnerabilities: List[Vulnerability],
+        chain_executor=None,
+        roe=None,
     ) -> List[ExploitChain]:
         """Detect exploit chains from raw vulnerability findings.
 
@@ -264,7 +278,7 @@ class ExploitChainDetector:
             List of ExploitChain objects with confidence >= CONFIDENCE_THRESHOLD.
             Empty list on any error, timeout, or insufficient input.
         """
-        from triage.ranking import MAX_TRIAGE_FINDINGS  # avoid circular at module level
+        MAX_TRIAGE_FINDINGS = 50  # inlined after triage module deletion
 
         if len(vulnerabilities) < 2:
             logger.debug("[CHAIN-DETECT] Too few vulnerabilities (%d < 2)", len(vulnerabilities))
@@ -331,6 +345,9 @@ class ExploitChainDetector:
 
             chains = self._parse_legacy_response(raw)
             logger.info("[CHAIN-DETECT] Detected %d chains (%.1fs)", len(chains), elapsed)
+
+            # Attach executor results if ROE permits chain execution
+            chains = self._maybe_execute_top_chain(chains, chain_executor=chain_executor, roe=roe)
             return chains
 
         except Exception as exc:
@@ -416,6 +433,56 @@ class ExploitChainDetector:
         for original in originals:
             result.append(updated_by_id.get(original.chain_id, original))
         return result
+
+    def _maybe_execute_top_chain(
+        self,
+        chains: List[ExploitChain],
+        chain_executor=None,
+        roe=None,
+    ) -> List[ExploitChain]:
+        """Execute the top-ranked chain if ROE allows and executor is provided.
+
+        Attaches execution_result to the chain object as a dynamic attribute if
+        execution succeeds. Never raises — always returns the original chains list.
+
+        Args:
+            chains: Pre-built ExploitChain list.
+            chain_executor: Module or callable with execute_chain coroutine.
+            roe: ROE object; must have allow_chain_execution=True to proceed.
+
+        Returns:
+            Original chains list (potentially with execution_result attached to top chain).
+        """
+        if not chains or chain_executor is None or roe is None:
+            return chains
+
+        allow_exec = bool(getattr(roe, "allow_chain_execution", False))
+        if not allow_exec:
+            logger.debug("[CHAIN-EXEC] allow_chain_execution=False; skipping live replay")
+            return chains
+
+        top_chain = chains[0]
+        logger.info("[CHAIN-EXEC] Attempting live replay of chain %s", top_chain.chain_id)
+
+        try:
+            import asyncio
+            exec_fn = getattr(chain_executor, "execute_chain", chain_executor)
+            result = asyncio.run(exec_fn(top_chain, roe))
+            # Attach as dynamic attribute (ExploitChain is a dataclass — may need __dict__)
+            try:
+                object.__setattr__(top_chain, "execution_result", result)
+            except (TypeError, AttributeError):
+                top_chain.__dict__["execution_result"] = result  # type: ignore[attr-defined]
+            logger.info(
+                "[CHAIN-EXEC] Replay complete: validated=%s steps=%d/%d",
+                result.validated,
+                result.steps_succeeded,
+                result.steps_attempted,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("[CHAIN-EXEC] Chain replay failed: %s", exc)
+
+        return chains
 
     def _parse_legacy_response(self, raw: str) -> List[ExploitChain]:
         """Parse a raw detect_chains() LLM response.
