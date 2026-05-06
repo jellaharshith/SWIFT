@@ -10,8 +10,28 @@ def get_payloads(
     anthropic_client=None,
     framework_hints: Optional[_List[str]] = None,
     previous_failures: Optional[_List[str]] = None,
+    payload_library=None,
 ) -> list:
-    """Return LLM-generated payloads if client available, else return fallback constants."""
+    """Return payloads with merge order: user > LLM > builtin.
+
+    Args:
+        vuln_type: Vulnerability type key.
+        fallback: Hardcoded builtin payloads used as last resort.
+        anthropic_client: Optional Anthropic client for LLM generation.
+        framework_hints: Tech stack hints forwarded to LLM generator.
+        previous_failures: Payloads that already failed.
+        payload_library: Optional PayloadLibrary for user-supplied payloads.
+
+    Returns:
+        Merged payload list: user first, then LLM or builtins.
+    """
+    user_payloads: list = []
+    if payload_library is not None:
+        try:
+            user_payloads = payload_library.get_user_payloads(vuln_type)
+        except Exception:
+            pass
+
     if anthropic_client is not None:
         try:
             from browser.payload_generator import generate_payloads
@@ -22,10 +42,11 @@ def get_payloads(
                 anthropic_client=anthropic_client,
             )
             if generated:
-                return generated
+                return user_payloads + generated
         except Exception:
             pass
-    return list(fallback)
+
+    return user_payloads + list(fallback)
 
 XSS_PAYLOADS = [
     "<script>window.__swift_xss=1</script>",

@@ -34,6 +34,13 @@ from browser.probes import (
 from log.audit import log_step
 from browser.session_manager import SessionManager
 
+# Advanced probe cohort (WS5) — imported lazily inside helpers to avoid hard deps
+_GRAPHQL_PATH_FRAGMENT = "/graphql"
+_RACE_CONDITION_KEYWORDS = (
+    "/transfer", "/purchase", "/redeem", "/vote", "/like",
+    "/apply", "/checkout", "/buy", "/pay", "/claim",
+)
+
 # Per-host probe budget in seconds. If elapsed exceeds this, stop probing.
 PER_PROBE_BUDGET_SECONDS = 60
 
@@ -60,6 +67,7 @@ class BrowserScanResult:
     insecure_cookies: list[str] = field(default_factory=list)
     mixed_content: list[str] = field(default_factory=list)
     error: str | None = None
+    session_artifact: str | None = None  # path to redacted SessionManager JSON for chain / redteam
 
     def to_dict(self) -> dict[str, Any]:
         from dataclasses import asdict as _asdict
@@ -73,6 +81,7 @@ class BrowserScanResult:
             "mixed_content": self.mixed_content,
             "error": self.error,
             "smuggling": smuggling_dict,
+            "session_artifact": self.session_artifact,
         }
 
 
@@ -542,6 +551,76 @@ async def _probe_xxe(page, url: str, result: BrowserScanResult, deadline: float 
             continue
 
 
+# ── WS5 Advanced probe cohort ────────────────────────────────────────────────
+
+async def _probe_advanced_cohort(
+    page,
+    url: str,
+    result: BrowserScanResult,
+) -> None:
+    """Dispatch WS5 advanced probes: GraphQL, race condition, dom IDOR, API key brute.
+
+    Each sub-probe is conditional on URL characteristics to avoid noise.
+
+    Args:
+        page: Playwright Page object (used for dom_idor context).
+        url: Target URL.
+        result: BrowserScanResult accumulator — findings appended via .findings.
+    """
+    url_lower = url.lower()
+
+    # GraphQL probe — only on /graphql endpoints
+    if _GRAPHQL_PATH_FRAGMENT in url_lower:
+        log_step("browser.probe.graphql", url=url)
+        try:
+            from browser.graphql_probe import probe_graphql
+            gql_findings = await probe_graphql(url)
+            for f in gql_findings:
+                result.findings.append(BrowserFinding(
+                    kind=f"graphql_{f.attack_type}",
+                    severity=f.severity.lower(),
+                    url=f.url,
+                    evidence=f.response_excerpt[:300],
+                    payload=f.payload[:200],
+                ))
+        except Exception as exc:  # noqa: BLE001
+            log_step("browser.probe.graphql.error", url=url, err=str(exc), level="warning")
+
+    # Race condition probe — only on state-change endpoint patterns
+    if any(kw in url_lower for kw in _RACE_CONDITION_KEYWORDS):
+        log_step("browser.probe.race_condition", url=url)
+        try:
+            from browser.race_condition import probe_race_condition
+            race_finding = await probe_race_condition(url, method="POST", n=20)
+            if race_finding and race_finding.confidence >= 0.7:
+                result.findings.append(BrowserFinding(
+                    kind="race_condition",
+                    severity="high" if race_finding.confidence >= 0.95 else "medium",
+                    url=race_finding.url,
+                    evidence="; ".join(race_finding.anomalies),
+                    payload=str(race_finding.payload or ""),
+                ))
+        except Exception as exc:  # noqa: BLE001
+            log_step("browser.probe.race.error", url=url, err=str(exc), level="warning")
+
+    # DOM IDOR probe — uses Playwright context; runs for all URLs with IDs
+    log_step("browser.probe.dom_idor", url=url)
+    try:
+        from browser.dom_idor import probe_dom_idor
+        browser_ctx = getattr(page, "context", None)
+        dom_findings = await probe_dom_idor(url, playwright_context=browser_ctx)
+        for f in dom_findings:
+            result.findings.append(BrowserFinding(
+                kind="dom_idor",
+                severity="high" if f.confidence >= 0.95 else "medium",
+                url=f.url,
+                evidence=f.data_diff,
+                payload=f"id {f.original_id} → {f.mutated_id} ({f.selector})",
+            ))
+    except Exception as exc:  # noqa: BLE001
+        log_step("browser.probe.dom_idor.error", url=url, err=str(exc), level="warning")
+
+
 # ── Main probe dispatcher ─────────────────────────────────────────────────────
 
 async def _probe(page, url: str, result: BrowserScanResult, mode: str = "pentester") -> None:
@@ -591,6 +670,9 @@ async def _probe(page, url: str, result: BrowserScanResult, mode: str = "pentest
         if _budget_exceeded():
             return
         await helper(page, url, result)
+
+    # ── WS5 Advanced probe cohort ─────────────────────────────────────────
+    await _probe_advanced_cohort(page, url, result)
 
 
 async def _run(target: str, headless: bool = True, mode: str = "pentester") -> BrowserScanResult:
@@ -652,6 +734,7 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
     session_path = Path(f"/tmp/swift-session-{uuid.uuid4().hex[:8]}.json")
     try:
         session.save(session_path)
+        result.session_artifact = str(session_path)
     except Exception:
         pass
 
