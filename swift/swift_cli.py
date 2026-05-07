@@ -114,7 +114,30 @@ def run_redteam(args: argparse.Namespace) -> dict[str, Any]:
     from config.consent import require_consent
 
     require_consent(args)
-    log_step("cli.redteam.start", roe=args.roe, target=getattr(args, "target", None))
+    log_step("cli.redteam.start", roe=args.roe, target=getattr(args, "target", None),
+             agentic=getattr(args, "agentic", False))
+
+    if getattr(args, "agentic", False):
+        from security.roe import load_roe
+        from agent.redteam_agent import RedTeamAgent
+        from agent.agent_prompts import AgentBudget
+        import os
+        roe = load_roe(args.roe)
+        budget = AgentBudget(
+            max_probe_calls=int(os.getenv("SWIFT_AGENT_BUDGET_PROBES", "50")),
+            max_sonnet_calls=int(os.getenv("SWIFT_AGENT_BUDGET_SONNET", "20")),
+            max_time_seconds=int(os.getenv("SWIFT_AGENT_BUDGET_SECONDS", "3600")),
+        )
+        agent = RedTeamAgent(target=args.target or "", roe=roe, budget=budget)
+        result = asyncio.run(agent.run())
+        return {
+            "status": "ok",
+            "mode": "agentic",
+            "iterations": result.iterations,
+            "findings": len(result.findings),
+            "agent_log": str(result.agent_log_path),
+        }
+
     payload = asyncio.run(execute_redteam(args))
     eng = payload.get("engagement_id", "engagement")
     out_path = (
@@ -554,6 +577,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     redteam.add_argument("--privesc-image", default="ubuntu:22.04", help="Container image for privesc phase")
     redteam.add_argument("--privesc-timeout", type=int, default=120, help="Privesc container timeout seconds")
+    # v6.0: agentic mode
+    redteam.add_argument("--agentic", action="store_true",
+                         help="Use Sonnet agentic loop instead of deterministic pipeline")
 
     osint = sub.add_parser("osint", help="OSINT recon: DNS, GitHub dorks, Shodan, WHOIS")
     osint.add_argument("--roe", required=True)
@@ -597,6 +623,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Interactive scanner wizard — choose codebase, URL, or domain in plain English",
     )
 
+    ver = sub.add_parser("version", help="Show installed swiftsec version")
+    ver.add_argument("--check", action="store_true", help="Check PyPI for a newer release")
+
+    upd = sub.add_parser("update", help="Upgrade swiftsec to the latest release via pip")
+    upd.add_argument("--check", action="store_true", help="Only check for updates, do not install")
+
     web = sub.add_parser("web-scan", help="Playwright-driven live web vulnerability scan")
     web.add_argument("--target", required=True, help="HTTP(S) URL to scan")
     web.add_argument("--headed", action="store_true", help="Show browser (default: headless)")
@@ -613,6 +645,34 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--image", default="ubuntu:22.04")
     pe.add_argument("--timeout", type=int, default=120)
     pe.add_argument("--output-file", default=None)
+
+    # v6.0: audit verify / export
+    audit_p = sub.add_parser("audit", help="Audit log verification and export")
+    audit_sub = audit_p.add_subparsers(dest="audit_cmd", required=True)
+    av = audit_sub.add_parser("verify", help="Verify audit log hash chain integrity")
+    av.add_argument("--log", required=True, help="Path to audit.jsonl file")
+    ax = audit_sub.add_parser("export", help="Export audit log as Markdown report")
+    ax.add_argument("--log", required=True, help="Path to audit.jsonl file")
+    ax.add_argument("--out", required=True, help="Output Markdown path")
+
+    # v6.0: plugin install / list / remove / validate
+    plugin_p = sub.add_parser("plugin", help="Manage SWIFT probe plugins")
+    plugin_sub = plugin_p.add_subparsers(dest="plugin_cmd", required=True)
+    pi = plugin_sub.add_parser("install", help="Install a plugin from PyPI or local path")
+    pi.add_argument("package", help="PyPI package name or local path")
+    plugin_sub.add_parser("list", help="List registered plugins")
+    pr = plugin_sub.add_parser("remove", help="Remove an installed plugin")
+    pr.add_argument("name", help="Plugin module name")
+    pv = plugin_sub.add_parser("validate", help="Validate a plugin without installing")
+    pv.add_argument("path", help="Path to plugin Python file or package")
+
+    # v6.0: agent-status
+    agent_status_p = sub.add_parser("agent-status", help="Show live agentic engagement status")
+    agent_status_p.add_argument(
+        "--engagement-dir",
+        default=None,
+        help="Path to engagement dir (default: latest ~/.swift/engagements/*)",
+    )
 
     return parser
 
@@ -723,6 +783,58 @@ def run_niche(args: argparse.Namespace) -> dict[str, Any]:
     return {"status": "ok", "target": args.target, "niche_profile": profile_dict}
 
 
+def run_version(args: argparse.Namespace) -> dict[str, Any]:
+    """Show current version and optionally check PyPI for updates."""
+    from swift import __version__
+
+    print(f"swiftsec {__version__}")
+
+    if getattr(args, "check", False):
+        import urllib.request
+        import urllib.error
+        try:
+            url = "https://pypi.org/pypi/swiftsec/json"
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                import json as _json
+                data = _json.loads(resp.read())
+            latest = data["info"]["version"]
+            if latest == __version__:
+                print(f"Up to date (latest: {latest})")
+            else:
+                print(f"Update available: {latest}  →  run: swiftsec update")
+        except urllib.error.URLError as exc:
+            print(f"Could not reach PyPI: {exc}", file=sys.stderr)
+
+    return {"version": __version__}
+
+
+def run_update(args: argparse.Namespace) -> dict[str, Any]:
+    """Upgrade swiftsec via pip."""
+    import subprocess
+
+    check_only = getattr(args, "check", False)
+
+    if check_only:
+        # Delegate to run_version with --check
+        import types
+        v_args = types.SimpleNamespace(check=True)
+        return run_version(v_args)
+
+    print("Upgrading swiftsec...")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "swiftsec"],
+        capture_output=False,
+    )
+    if result.returncode != 0:
+        print("Upgrade failed.", file=sys.stderr)
+        sys.exit(result.returncode)
+
+    # Show new version
+    from swift import __version__
+    print(f"\nswiftsec upgraded successfully → {__version__}")
+    return {"status": "ok"}
+
+
 def run_chain_execute(args: argparse.Namespace) -> dict[str, Any]:
     """Load a chain from output dir and execute it (ROE required)."""
     from security.roe import load_roe
@@ -776,6 +888,8 @@ def main() -> None:
             "payload": run_payload,
             "niche": run_niche,
             "chain": run_chain_execute,
+            "version": run_version,
+            "update": run_update,
         }
         sys.exit(run_repl(parser, handlers))
 
@@ -792,10 +906,28 @@ def main() -> None:
     if hasattr(args, "config"):
         _load_config(args.config)
 
+    _V6_NO_ZERO_TRUST = {"audit", "plugin", "agent-status"}
     if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan",
                              "wizard", "web-scan", "privesc", "redteam", "osint",
-                             "payload", "niche", "chain"}:
+                             "payload", "niche", "chain", "version", "update"} | _V6_NO_ZERO_TRUST:
         _ensure_zero_trust(args)
+
+    # v6.0 commands handled inline (no JSON dump)
+    if args.command == "audit":
+        from audit.cli import run_verify, run_export
+        {"verify": run_verify, "export": run_export}[args.audit_cmd](args)
+        return
+
+    if args.command == "plugin":
+        from sdk.cli import run_install, run_list, run_remove, run_validate
+        {"install": run_install, "list": run_list, "remove": run_remove,
+         "validate": run_validate}[args.plugin_cmd](args)
+        return
+
+    if args.command == "agent-status":
+        from agent.redteam_agent import show_agent_status
+        show_agent_status(args)
+        return
 
     handlers = {
         "scan": run_scan,
@@ -814,6 +946,8 @@ def main() -> None:
         "payload": run_payload,
         "niche": run_niche,
         "chain": run_chain_execute,
+        "version": run_version,
+        "update": run_update,
     }
     try:
         payload = handlers[args.command](args)

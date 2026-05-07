@@ -69,6 +69,9 @@ class Vulnerability:
     exploitability: Optional[float] = None  # 0.0-1.0, inferred if not set
     business_impact_category: Optional[str] = None  # e.g., customer_data_breach
     risk_score: Optional[float] = None  # 0-100, calculated by RiskScorer
+    # v6.0 chain fields
+    chain_primitive: Optional[str] = None   # e.g. "ssrf", "oauth_token", "ws_token"
+    oob_confirmed: bool = False             # True when OOB callback received
 
 
 @dataclass

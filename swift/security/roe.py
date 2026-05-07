@@ -2,6 +2,22 @@
 
 Every offensive command must load and validate an ROE before touching a target.
 Fail-closed: missing ROE = SystemExit with [DENY] prefix.
+
+v6.0 Technique Strings
+-----------------------
+Existing (v5.x):
+  - osint           : Passive reconnaissance (DNS, WHOIS, GitHub dorks, Shodan)
+  - active_scan     : Active vulnerability probing (SQLi, XSS, SSRF, IDOR, JWT, etc.)
+  - exploit         : Exploitation of discovered vulnerabilities
+  - post_exploit    : Post-exploitation (data-exfil, persistence, C2 feasibility)
+
+New in v6.0:
+  - oob_ssrf        : Out-of-band SSRF probing using external callback infrastructure
+  - oauth_attack    : OAuth/OIDC flow attacks (token leakage, redirect abuse, PKCE bypass)
+  - websocket_attack: WebSocket protocol-level attacks and message tampering
+  - bizlogic        : Business logic abuse (price manipulation, workflow bypass, race conditions)
+  - agentic_loop    : Autonomous multi-step agentic attack loop execution
+  - chain_execution : Replay of chained credential-reuse or multi-step attack sequences
 """
 from __future__ import annotations
 
@@ -16,6 +32,24 @@ try:
     import yaml
 except ImportError:
     yaml = None  # type: ignore
+
+# All recognized technique strings (v5.x + v6.0)
+KNOWN_TECHNIQUES: frozenset[str] = frozenset({
+    # v5.x
+    "osint", "active_scan", "exploit", "post_exploit",
+    # v6.0
+    "oob_ssrf", "oauth_attack", "websocket_attack", "bizlogic",
+    "agentic_loop", "chain_execution",
+})
+
+
+class ROEViolation(Exception):
+    """Raised when an ROE gate is violated and raise_on_violation=True.
+
+    Provides a programmatic alternative to the default sys.exit(2) behaviour
+    so callers (agents, tests, async pipelines) can catch and handle denials
+    without terminating the process.
+    """
 
 
 @dataclass(frozen=True)
@@ -102,13 +136,39 @@ def assert_target_in_scope(roe: ROE, target: str) -> None:
     )
 
 
-def assert_technique_allowed(roe: ROE, technique: str) -> None:
-    """Raise SystemExit if technique is not in allowed_techniques."""
+def assert_technique_allowed(
+    roe: ROE,
+    technique: str,
+    raise_on_violation: bool = False,
+) -> bool:
+    """Check that *technique* is permitted by this ROE.
+
+    Args:
+        roe: The loaded ROE to check against.
+        technique: Technique string to validate (see module docstring for the
+            full list of recognised values, including v6.0 additions).
+        raise_on_violation: When ``True``, raise :class:`ROEViolation` instead
+            of calling :func:`_deny` (which prints and calls ``sys.exit(2)``).
+            Defaults to ``False`` to preserve existing behaviour.
+
+    Returns:
+        ``True`` if the technique is allowed.
+
+    Raises:
+        ROEViolation: If *raise_on_violation* is ``True`` and the technique is
+            not in ``roe.allowed_techniques``.
+        SystemExit: (exit code 2) If *raise_on_violation* is ``False`` and the
+            technique is not allowed — identical to the pre-v6.0 behaviour.
+    """
     if technique not in roe.allowed_techniques:
-        _deny(
+        message = (
             f"Technique '{technique}' is NOT allowed by engagement '{roe.engagement_id}'.\n"
             f"Allowed: {sorted(roe.allowed_techniques)}"
         )
+        if raise_on_violation:
+            raise ROEViolation(message)
+        _deny(message)
+    return True
 
 
 def assert_window_active(roe: ROE) -> None:
