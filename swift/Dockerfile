@@ -43,13 +43,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install nuclei (Go binary)
-RUN curl -sL https://github.com/projectdiscovery/nuclei/releases/latest/download/nuclei_linux_amd64.zip \
+# Install nuclei (Go binary) — pinned version with checksum
+ARG NUCLEI_VERSION=3.3.9
+ARG NUCLEI_SHA256=dfecedc31364d70b7291b347c74fd4d1d3185d30301c025b7490717d29daf28a
+RUN curl -fsSL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip" \
     -o /tmp/nuclei.zip \
-    && unzip /tmp/nuclei.zip -d /usr/local/bin/ \
+    && echo "${NUCLEI_SHA256}  /tmp/nuclei.zip" | sha256sum -c - \
+    && unzip /tmp/nuclei.zip nuclei -d /usr/local/bin/ \
     && rm /tmp/nuclei.zip \
-    && chmod +x /usr/local/bin/nuclei \
-    && nuclei -update-templates 2>/dev/null || true
+    && chmod +x /usr/local/bin/nuclei
 
 # Copy Python venv from builder
 COPY --from=builder /opt/venv /opt/venv
