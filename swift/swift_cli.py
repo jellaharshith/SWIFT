@@ -114,7 +114,30 @@ def run_redteam(args: argparse.Namespace) -> dict[str, Any]:
     from config.consent import require_consent
 
     require_consent(args)
-    log_step("cli.redteam.start", roe=args.roe, target=getattr(args, "target", None))
+    log_step("cli.redteam.start", roe=args.roe, target=getattr(args, "target", None),
+             agentic=getattr(args, "agentic", False))
+
+    if getattr(args, "agentic", False):
+        from security.roe import load_roe
+        from agent.redteam_agent import RedTeamAgent
+        from agent.agent_prompts import AgentBudget
+        import os
+        roe = load_roe(args.roe)
+        budget = AgentBudget(
+            max_probe_calls=int(os.getenv("SWIFT_AGENT_BUDGET_PROBES", "50")),
+            max_sonnet_calls=int(os.getenv("SWIFT_AGENT_BUDGET_SONNET", "20")),
+            max_time_seconds=int(os.getenv("SWIFT_AGENT_BUDGET_SECONDS", "3600")),
+        )
+        agent = RedTeamAgent(target=args.target or "", roe=roe, budget=budget)
+        result = asyncio.run(agent.run())
+        return {
+            "status": "ok",
+            "mode": "agentic",
+            "iterations": result.iterations,
+            "findings": len(result.findings),
+            "agent_log": str(result.agent_log_path),
+        }
+
     payload = asyncio.run(execute_redteam(args))
     eng = payload.get("engagement_id", "engagement")
     out_path = (
@@ -554,6 +577,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     redteam.add_argument("--privesc-image", default="ubuntu:22.04", help="Container image for privesc phase")
     redteam.add_argument("--privesc-timeout", type=int, default=120, help="Privesc container timeout seconds")
+    # v6.0: agentic mode
+    redteam.add_argument("--agentic", action="store_true",
+                         help="Use Sonnet agentic loop instead of deterministic pipeline")
 
     osint = sub.add_parser("osint", help="OSINT recon: DNS, GitHub dorks, Shodan, WHOIS")
     osint.add_argument("--roe", required=True)
