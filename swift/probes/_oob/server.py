@@ -5,7 +5,6 @@ import secrets
 import socket
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -24,12 +23,22 @@ class OOBCallbackServer:
     Use as async context manager.
     """
 
+    @staticmethod
+    def _validate_interactsh_url(url: str) -> None:
+        """Reject attacker-controlled INTERACTSH_URL values at startup."""
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if parsed.scheme != "https":
+            raise ValueError(f"INTERACTSH_URL must use https://, got: {url!r}")
+        if not parsed.netloc or parsed.netloc.startswith("localhost") or parsed.netloc.startswith("127."):
+            raise ValueError(f"INTERACTSH_URL must not be localhost: {url!r}")
+
     def __init__(self, host: str = "127.0.0.1", port: int = 0) -> None:
         if os.getenv("INTERACTSH_URL"):
+            interactsh_url = os.environ["INTERACTSH_URL"]
+            self._validate_interactsh_url(interactsh_url)
             from .interactsh import InteractshClient
-            self._impl: Optional["InteractshClient"] = InteractshClient(
-                os.environ["INTERACTSH_URL"]
-            )
+            self._impl: InteractshClient | None = InteractshClient(interactsh_url)
             self._mode = "interactsh"
         else:
             self._impl = None
@@ -37,8 +46,9 @@ class OOBCallbackServer:
         self.host = host
         self.port = port
         self._events: dict[str, list[CallbackEvent]] = {}
-        self._server: Optional[asyncio.base_events.Server] = None
-        self._serve_task: Optional[asyncio.Task] = None
+        self._server: asyncio.base_events.Server | None = None
+        self._serve_task: asyncio.Task | None = None
+        self._MAX_TOKENS = 1_000  # cap dict size to bound memory usage
 
     async def __aenter__(self) -> "OOBCallbackServer":
         if self._mode == "local":
@@ -60,7 +70,7 @@ class OOBCallbackServer:
         elif self._impl:
             await self._impl.stop()
 
-    def alloc_url(self, token: Optional[str] = None) -> str:
+    def alloc_url(self, token: str | None = None) -> str:
         token = token or secrets.token_hex(8)
         if self._mode == "interactsh":
             return self._impl.alloc(token)  # type: ignore[union-attr]
@@ -75,14 +85,14 @@ class OOBCallbackServer:
             raw = await asyncio.wait_for(reader.read(4096), timeout=5.0)
             line = raw.split(b"\r\n", 1)[0].decode("ascii", "replace")
             parts = line.split(" ")
-            if len(parts) >= 2:
-                token = parts[1].strip("/").split("/")[0]
+            if len(parts) >= 2 and len(self._events) < self._MAX_TOKENS:
+                token = parts[1].strip("/").split("/")[0][:64]  # bound token length
                 evt = CallbackEvent(
                     token=token,
                     received_at=time.time(),
                     source_ip=peer[0] if peer else "",
                     protocol="http",
-                    data={"method": parts[0], "raw_request": line},
+                    data={"method": parts[0], "raw_request": line[:512]},
                 )
                 self._events.setdefault(token, []).append(evt)
             writer.write(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
@@ -94,7 +104,7 @@ class OOBCallbackServer:
 
     async def wait_for_callback(
         self, token: str, timeout: float = 30.0
-    ) -> Optional[CallbackEvent]:
+    ) -> CallbackEvent | None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             if self._mode == "interactsh":

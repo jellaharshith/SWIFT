@@ -1,13 +1,26 @@
-"""Immutable audit log with SHA-256 hash chain for tamper detection."""
+"""Immutable audit log with SHA-256 hash chain for tamper detection.
 
-from dataclasses import dataclass, asdict, field
+Without SWIFT_AUDIT_HMAC_KEY: plain SHA-256 chain — detects accidental corruption.
+With SWIFT_AUDIT_HMAC_KEY: HMAC-SHA256 keyed chain — forging requires the key.
+"""
+
+import asyncio
+import gzip
+import hashlib
+import hmac
+import json
+import os
+import re
+import threading
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
-import asyncio, hashlib, json, gzip, os, re, threading
 
 GENESIS = "GENESIS"
 _LOCK = threading.Lock()
+_HMAC_KEY: bytes | None = (
+    os.getenv("SWIFT_AUDIT_HMAC_KEY", "").encode() or None
+)
 
 
 @dataclass
@@ -27,14 +40,17 @@ class LogEntry:
         return json.dumps(d, sort_keys=True, separators=(",", ":"))
 
     def compute_hash(self) -> str:
-        return hashlib.sha256(self.to_hashable().encode()).hexdigest()
+        payload = self.to_hashable().encode()
+        if _HMAC_KEY:
+            return hmac.new(_HMAC_KEY, payload, hashlib.sha256).hexdigest()
+        return hashlib.sha256(payload).hexdigest()
 
 
 @dataclass
 class ChainVerificationResult:
     valid: bool
     entries_checked: int
-    first_tampered_entry: Optional[int] = None
+    first_tampered_entry: int | None = None
     tampered_fields: list = field(default_factory=list)
 
 
