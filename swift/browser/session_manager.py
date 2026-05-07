@@ -118,6 +118,19 @@ class SessionManager:
         self._jwt = token
         self._headers["Authorization"] = f"Bearer {token}"
 
+    def set_oauth_token(self, token: str, expires_at=None) -> None:
+        """Store OAuth access token and inject as Authorization header."""
+        self._oauth_token = token
+        self._oauth_expires = expires_at
+        # Inject into stored headers for next attach()
+        if not hasattr(self, "_extra_headers"):
+            self._extra_headers = {}
+        self._extra_headers["Authorization"] = f"Bearer {token}"
+
+    def set_ws_token(self, token: str) -> None:
+        """Store WebSocket auth token."""
+        self._ws_token = token
+
     def as_httpx_headers(self) -> Dict[str, str]:
         """Return headers suitable for httpx direct HTTP calls."""
         h = dict(self._headers)
