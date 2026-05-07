@@ -11,7 +11,7 @@ import os
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .agent_prompts import (
     AGENT_SYSTEM_PROMPT,
@@ -42,9 +42,9 @@ class RedTeamAgent:
         self,
         target: str,
         roe,
-        budget: Optional[AgentBudget] = None,
+        budget: AgentBudget | None = None,
         audit_logger=None,
-        engagement_dir: Optional[Path] = None,
+        engagement_dir: Path | None = None,
     ) -> None:
         self.target = target
         self.roe = roe
@@ -146,7 +146,7 @@ class RedTeamAgent:
         old = self.message_history[1:-5]
         keep = self.message_history[-5:]
         summary_text = f"[COMPRESSED: {len(old)} prior turns. Findings so far: {len(self.findings_store)}. Hypotheses: {len(self.hypotheses)}]"
-        self.message_history = [self.message_history[0], {"role": "user", "content": summary_text}] + keep
+        self.message_history = [self.message_history[0], {"role": "user", "content": summary_text}, *keep]
 
     async def _call_sonnet(self):
         client = _get_client()

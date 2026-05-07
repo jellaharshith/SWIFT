@@ -5,9 +5,9 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 import httpx  # module-level for test patching
+
 from audit.decorators import audit_logged
 from sdk.base import BaseModule, Finding, Phase, Severity, VulnType
 from sdk.decorators import roe_gated
@@ -20,7 +20,9 @@ _CLIENT = None
 def _get_client():
     global _CLIENT
     if _CLIENT is None:
-        import os, anthropic
+        import os
+
+        import anthropic
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if api_key:
             _CLIENT = anthropic.Anthropic(api_key=api_key)
@@ -41,8 +43,8 @@ class FlowStep:
     url: str
     method: str
     fields: list[Field] = field(default_factory=list)
-    step_number: Optional[int] = None
-    total_steps: Optional[int] = None
+    step_number: int | None = None
+    total_steps: int | None = None
 
 
 @dataclass
@@ -178,7 +180,7 @@ class FlowAnalyzer:
 class BusinessLogicProbe(BaseModule):
     name = "bizlogic"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.BIZLOGIC]
+    vuln_types = [VulnType.BIZLOGIC]  # noqa: RUF012
     author = "swift-core"
     version = "1.0"
 
@@ -192,7 +194,7 @@ class BusinessLogicProbe(BaseModule):
         findings: list[Finding] = []
 
         flow = await AppFlowMapper().map(base_url, session)
-        attacks = await self._analyzer.analyze(flow)
+        await self._analyzer.analyze(flow)
 
         tasks = [
             self._negative_quantity(flow, base_url),
@@ -264,7 +266,7 @@ class BusinessLogicProbe(BaseModule):
                             # Replace price/amount values
                             for kw in ("price", "amount", "total", "cost"):
                                 post_data = re.sub(
-                                    rf"({kw}=)[^&]+", rf"\g<1>0.01", post_data, flags=re.IGNORECASE
+                                    rf"({kw}=)[^&]+", r"\g<1>0.01", post_data, flags=re.IGNORECASE
                                 )
                             tampered["intercepted"] = True
                             await route.continue_(post_data=post_data)

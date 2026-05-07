@@ -1,32 +1,13 @@
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from agent.agent_pool import AgentPool, CodeAgent, NetworkAgent, WebAgent, CVEAgent
-from agent.models import UnifiedScanResult, ScanResult
-
-
-def _make_scan_result():
-    r = MagicMock(spec=ScanResult)
-    r.vulnerabilities = []
-    r.patches = []
-    r.exploit_chains = []
-    r.ranked_findings = []
-    r.files_scanned = 3
-    r.duration_seconds = 5.0
-    r.scan_id = "TEST-001"
-    r.repo_path = "/tmp/repo"
-    r.total_cost_usd = 0.01
-    r.timestamp = "2026-04-27T00:00:00Z"
-    r.status = "complete"
-    r.signals_detected = 0
-    r.chain_detection_error = None
-    return r
+from agent.models import UnifiedScanResult
 
 
 def test_code_agent_emits_label():
     labels = []
-    with patch("agent.agent_pool.scan_codebase", return_value=_make_scan_result()):
-        agent = CodeAgent()
-        asyncio.run(agent.run("/tmp/repo", lambda msg: labels.append(msg)))
+    agent = CodeAgent()
+    asyncio.run(agent.run("/tmp/repo", lambda msg: labels.append(msg)))
     assert any("[CodeAgent]" in l for l in labels)
 
 
@@ -61,7 +42,6 @@ def test_cve_agent_emits_label():
 
 def test_agent_pool_returns_unified_scan_result():
     with (
-        patch("agent.agent_pool.scan_codebase", return_value=_make_scan_result()),
         patch("agent.agent_pool.KaliRunner") as MockRunner,
         patch("agent.agent_pool.Correlator") as MockCorrelator,
     ):

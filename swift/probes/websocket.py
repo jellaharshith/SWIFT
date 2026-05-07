@@ -5,9 +5,9 @@ import asyncio
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
-import websockets  # module-level import enables test patching via probes.websocket.websockets
+import websockets  # noqa: F401  # module-level import enables test patching via probes.websocket.websockets
+
 from audit.decorators import audit_logged
 from sdk.base import BaseModule, Finding, Phase, Severity, VulnType
 from sdk.decorators import roe_gated
@@ -28,7 +28,7 @@ def _sanitize(data: str) -> str:
 @dataclass
 class WebSocketEndpoint:
     url: str
-    protocol: Optional[str] = None
+    protocol: str | None = None
     requires_auth: bool = False
     message_schema: dict = field(default_factory=dict)
     upgrade_headers: dict = field(default_factory=dict)
@@ -89,7 +89,7 @@ class WebSocketDiscovery:
 class WebSocketProbe(BaseModule):
     name = "websocket"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.WEBSOCKET]
+    vuln_types = [VulnType.WEBSOCKET]  # noqa: RUF012
     author = "swift-core"
     version = "1.0"
 
@@ -207,7 +207,7 @@ class WebSocketProbe(BaseModule):
         try:
             import httpx
             base = ep.url.replace("ws://", "http://").replace("wss://", "https://")
-            base = base.rstrip("/socket.io").rstrip("/ws")
+            base = base.rstrip("/socket.io").rstrip("/ws")  # noqa: B005
             async with httpx.AsyncClient(timeout=5, verify=False) as client:
                 for ns in dangerous_namespaces:
                     poll_url = f"{base}/socket.io/?EIO=4&transport=polling&nsp={ns}"

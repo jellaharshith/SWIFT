@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 import httpx
 
@@ -27,13 +25,13 @@ class OAuthSurface:
     jwks_uri: str = ""
     supported_grant_types: list[str] = field(default_factory=list)
     supported_response_types: list[str] = field(default_factory=list)
-    library_fingerprint: Optional[str] = None
+    library_fingerprint: str | None = None
 
 
 class OAuthDiscovery:
     """Discover OAuth/OIDC endpoints and fingerprint the library."""
 
-    async def discover(self, base_url: str, session=None) -> Optional[OAuthSurface]:
+    async def discover(self, base_url: str, session=None) -> OAuthSurface | None:
         surface = OAuthSurface()
         # 1. Try OIDC discovery document
         oidc_url = base_url.rstrip("/") + "/.well-known/openid-configuration"
@@ -76,7 +74,7 @@ class OAuthDiscovery:
         return surface if (surface.authorization_endpoint or surface.token_endpoint) else None
 
     @staticmethod
-    def _fingerprint(body: str, headers: dict) -> Optional[str]:
+    def _fingerprint(body: str, headers: dict) -> str | None:
         combined = body.lower() + " ".join(f"{k}:{v}".lower() for k, v in headers.items())
         for lib, patterns in _LIBRARY_PATTERNS.items():
             if any(p.lower() in combined for p in patterns):
@@ -87,7 +85,7 @@ class OAuthDiscovery:
 class OAuthProbe(BaseModule):
     name = "oauth"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.OAUTH]
+    vuln_types = [VulnType.OAUTH]  # noqa: RUF012
     author = "swift-core"
     version = "1.0"
 
