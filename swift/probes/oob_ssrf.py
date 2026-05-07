@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import secrets
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse, quote
+from urllib.parse import parse_qs, quote, urlencode, urlparse, urlunparse
 
 import httpx
 
 from audit.decorators import audit_logged
 from sdk.base import BaseModule, Finding, Phase, Severity, VulnType
 from sdk.decorators import roe_gated
+
 from ._oob.server import OOBCallbackServer
 
 CLOUD_TARGETS = {
@@ -40,7 +41,7 @@ def _bypass_encodings(url: str) -> list[str]:
 class OOBSSRFProbe(BaseModule):
     name = "oob_ssrf"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.OOB_SSRF, VulnType.SSRF]
+    vuln_types = [VulnType.OOB_SSRF, VulnType.SSRF]  # noqa: RUF012
     author = "swift-core"
     version = "1.0"
 

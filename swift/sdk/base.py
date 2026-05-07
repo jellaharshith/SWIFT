@@ -1,13 +1,13 @@
 """Base classes for SWIFT probe modules."""
 from __future__ import annotations
 
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
-import uuid
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from agent.models import Vulnerability
@@ -58,18 +58,18 @@ class Finding:
     target_url: str
     confidence: float
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    request_evidence: Optional[str] = None
-    response_evidence: Optional[str] = None
-    screenshot_path: Optional[Path] = None
+    request_evidence: str | None = None
+    response_evidence: str | None = None
+    screenshot_path: Path | None = None
     oob_confirmed: bool = False
-    chain_primitive: Optional[str] = None
-    cwe_id: Optional[int] = None
-    cvss_vector: Optional[str] = None
+    chain_primitive: str | None = None
+    cwe_id: int | None = None
+    cvss_vector: str | None = None
     remediation: str = ""
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     raw_metadata: dict = field(default_factory=dict)
 
-    def to_vulnerability(self) -> "Vulnerability":
+    def to_vulnerability(self) -> Vulnerability:
         from agent.models import Vulnerability
         return Vulnerability(
             id=self.id,
@@ -94,16 +94,16 @@ class BaseModule(ABC):
 
     name: str = ""
     phase: Phase = Phase.ACTIVE
-    vuln_types: list[VulnType] = []
+    vuln_types: ClassVar[list[VulnType]] = []
     author: str = ""
     version: str = ""
-    requires: list[str] = []
+    requires: ClassVar[list[str]] = []
 
     @abstractmethod
     async def probe(self, target, session, roe) -> list[Finding]: ...
 
-    async def on_finding(self, finding: Finding) -> None: pass
-    async def on_complete(self, findings: list[Finding]) -> None: pass
+    async def on_finding(self, finding: Finding) -> None: pass  # noqa: B027
+    async def on_complete(self, findings: list[Finding]) -> None: pass  # noqa: B027
 
     @classmethod
     def validate_subclass(cls) -> None:

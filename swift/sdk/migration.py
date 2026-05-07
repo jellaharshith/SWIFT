@@ -48,7 +48,7 @@ class _FunctionalAdapter(BaseModule):
 class GraphQLAdapter(_FunctionalAdapter):
     name = "graphql"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.GRAPHQL]
+    vuln_types = [VulnType.GRAPHQL]  # noqa: RUF012
     author = "swift-core"
     version = "5.0"
 
@@ -61,7 +61,7 @@ class GraphQLAdapter(_FunctionalAdapter):
 class DomIdorAdapter(_FunctionalAdapter):
     name = "idor"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.IDOR]
+    vuln_types = [VulnType.IDOR]  # noqa: RUF012
     author = "swift-core"
     version = "5.0"
 
@@ -74,7 +74,7 @@ class DomIdorAdapter(_FunctionalAdapter):
 class ApiKeyAdapter(_FunctionalAdapter):
     name = "api_key"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.API_KEY]
+    vuln_types = [VulnType.API_KEY]  # noqa: RUF012
     author = "swift-core"
     version = "5.0"
 
@@ -87,7 +87,7 @@ class ApiKeyAdapter(_FunctionalAdapter):
 class RaceConditionAdapter(_FunctionalAdapter):
     name = "race_condition"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.BIZLOGIC]
+    vuln_types = [VulnType.BIZLOGIC]  # noqa: RUF012
     author = "swift-core"
     version = "5.0"
 
@@ -100,7 +100,7 @@ class RaceConditionAdapter(_FunctionalAdapter):
 class SmugglingAdapter(_FunctionalAdapter):
     name = "smuggling"
     phase = Phase.ACTIVE
-    vuln_types = [VulnType.SMUGGLING]
+    vuln_types = [VulnType.SMUGGLING]  # noqa: RUF012
     author = "swift-core"
     version = "5.0"
 

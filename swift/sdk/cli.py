@@ -28,11 +28,11 @@ def run_install(args) -> None:
 
 
 def run_list(args) -> None:
-    from sdk.registry import PluginRegistry
     from sdk.migration import ALL_ADAPTERS
+    from sdk.registry import PluginRegistry
     try:
-        from rich.table import Table
         from rich.console import Console
+        from rich.table import Table
         reg = PluginRegistry()
         reg.discover()
         for cls in ALL_ADAPTERS:
@@ -41,8 +41,12 @@ def run_list(args) -> None:
             except Exception:
                 pass
         table = Table(title="SWIFT Modules")
-        table.add_column("Name"); table.add_column("Version"); table.add_column("Author")
-        table.add_column("Phase"); table.add_column("Vuln Types"); table.add_column("Source")
+        table.add_column("Name")
+        table.add_column("Version")
+        table.add_column("Author")
+        table.add_column("Phase")
+        table.add_column("Vuln Types")
+        table.add_column("Source")
         for name in sorted(reg._modules):
             cls = reg._modules[name]
             is_builtin = any(cls is a for a in ALL_ADAPTERS)
@@ -54,7 +58,8 @@ def run_list(args) -> None:
         Console().print(table)
     except ImportError:
         # Fallback without rich
-        reg = PluginRegistry(); reg.discover()
+        reg = PluginRegistry()
+        reg.discover()
         for name in sorted(reg._modules):
             cls = reg._modules[name]
             print(f"{cls.name:<20} {cls.version:<8} {cls.author:<15} {cls.phase.value}")
@@ -85,8 +90,8 @@ def run_validate(args) -> None:
         sys.exit(1)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
-    from sdk.registry import PluginRegistry
     from sdk.base import BaseModule
+    from sdk.registry import PluginRegistry
     reg = PluginRegistry()
     found = 0
     for attr in vars(mod).values():
