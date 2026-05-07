@@ -1,7 +1,6 @@
 """Anthropic tool_use schemas and dispatcher for the agentic red-team loop."""
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -104,7 +103,7 @@ TOOL_SCHEMAS = [
 
 
 async def dispatch_tool(
-    tool_name: str, tool_input: dict[str, Any], agent: "RedTeamAgent"
+    tool_name: str, tool_input: dict[str, Any], agent: RedTeamAgent
 ) -> Any:
     """Dispatch a tool call from the agent loop to the appropriate handler."""
     if tool_name == "run_probe":
@@ -121,10 +120,25 @@ async def dispatch_tool(
         return {"error": f"Unknown tool: {tool_name}"}
 
 
-async def _run_probe(inp: dict, agent: "RedTeamAgent") -> list:
+def _target_in_scope(requested: str, authorized: str) -> bool:
+    """Prevent prompt-injected Sonnet from redirecting probes off-scope."""
+    from urllib.parse import urlparse
+    try:
+        req_host = urlparse(requested).netloc.lower().split(":")[0]
+        auth_host = urlparse(authorized).netloc.lower().split(":")[0]
+        # Allow exact match or subdomain of authorized host
+        return req_host == auth_host or req_host.endswith("." + auth_host)
+    except Exception:
+        return False
+
+
+async def _run_probe(inp: dict, agent: RedTeamAgent) -> list:
     probe_name = inp.get("probe_name", "")
     target = inp.get("target", "")
     agent.budget.probe_calls_used += 1
+
+    if not _target_in_scope(target, agent.target):
+        return {"error": f"Target '{target}' outside authorized scope '{agent.target}'. Probe blocked."}
 
     try:
         from sdk.registry import PluginRegistry
@@ -150,7 +164,7 @@ async def _run_probe(inp: dict, agent: "RedTeamAgent") -> list:
         return {"error": str(exc)}
 
 
-def _get_findings(inp: dict, agent: "RedTeamAgent") -> list:
+def _get_findings(inp: dict, agent: RedTeamAgent) -> list:
     findings = agent.findings_store
     severity_filter = inp.get("severity")
     confirmed_only = inp.get("confirmed_only", False)
@@ -162,13 +176,13 @@ def _get_findings(inp: dict, agent: "RedTeamAgent") -> list:
              "title": f.title, "confidence": f.confidence} for f in findings]
 
 
-def _get_attack_surface(inp: dict, agent: "RedTeamAgent") -> dict:
+def _get_attack_surface(inp: dict, agent: RedTeamAgent) -> dict:
     category = inp.get("category", "endpoints")
     surface = getattr(agent, "attack_surface", {})
     return surface.get(category, {})
 
 
-def _update_hypothesis(inp: dict, agent: "RedTeamAgent") -> dict:
+def _update_hypothesis(inp: dict, agent: RedTeamAgent) -> dict:
     from .agent_prompts import AgentHypothesis
     h = AgentHypothesis(
         text=inp["hypothesis"],
@@ -179,7 +193,7 @@ def _update_hypothesis(inp: dict, agent: "RedTeamAgent") -> dict:
     return {"logged": True, "hypothesis_count": len(agent.hypotheses)}
 
 
-def _mark_exhausted(inp: dict, agent: "RedTeamAgent") -> dict:
+def _mark_exhausted(inp: dict, agent: RedTeamAgent) -> dict:
     vector = inp.get("attack_vector", "")
     agent.exhausted_vectors.add(vector)
     return {"exhausted": vector}

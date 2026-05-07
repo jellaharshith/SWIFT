@@ -145,7 +145,14 @@ class RedTeamAgent:
         # Summarize turns 1..N-5 via Haiku
         old = self.message_history[1:-5]
         keep = self.message_history[-5:]
-        summary_text = f"[COMPRESSED: {len(old)} prior turns. Findings so far: {len(self.findings_store)}. Hypotheses: {len(self.hypotheses)}]"
+        vuln_types = sorted({str(getattr(f, "vuln_type", "?")) for f in self.findings_store})
+        exhausted = sorted(self.exhausted_vectors)
+        summary_text = (
+            f"[COMPRESSED: {len(old)} prior turns. "
+            f"Findings: {len(self.findings_store)} ({', '.join(vuln_types) or 'none'}). "
+            f"Hypotheses: {len(self.hypotheses)}. "
+            f"Exhausted vectors: {exhausted}.]"
+        )
         self.message_history = [self.message_history[0], {"role": "user", "content": summary_text}, *keep]
 
     async def _call_sonnet(self):
