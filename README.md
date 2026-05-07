@@ -16,7 +16,7 @@
 ╚══════╝ ╚══╝╚══╝ ╚═╝╚═╝        ╚═╝
 
   AI-Powered Red-Team Automation Pentester
-  v5.0.0 · CISSP/OSCP-grade · mode: red-team
+  v6.0.0 · CISSP/OSCP-grade · mode: red-team
 ```
 
 ## What SWIFT does
@@ -26,7 +26,12 @@
 | **OSINT (10 sources)** | DNS, crt.sh cert transparency, CNAME takeover, Wayback CDX, tech fingerprint, email enum, GitHub dorks, Shodan, WHOIS | Full target intel before first packet |
 | **Niche Classification** | Claude Sonnet + CISSP persona | Ranks OWASP/CWE attack niches, gates active probe phase |
 | **Triage** | Claude Haiku | Flags suspicious code patterns (~50ms/file) |
-| **Active probes** | Playwright + Claude Sonnet | 16 vuln types confirmed at ≥95% confidence |
+| **Active probes** | Playwright + Claude Sonnet | 20 vuln types confirmed at ≥95% confidence |
+| **OOB SSRF** | Async callback server + Interactsh | Confirmed out-of-band SSRF via real DNS/HTTP callbacks |
+| **OAuth/OIDC attacks** | httpx | PKCE downgrade, redirect_uri manipulation, token leakage, cred stuffing |
+| **WebSocket attacks** | websockets + Playwright | CSWSH, unauth upgrade, IDOR, injection, namespace abuse |
+| **Business logic** | Sonnet + Playwright | Price manipulation, coupon stacking, workflow skip, negative qty |
+| **Agentic loop** | RedTeamAgent (Sonnet tool-use) | Autonomous pentesting with plateau detection + budget gates |
 | **GraphQL attacks** | httpx | Introspection, batching, alias overload, BOLA |
 | **Race conditions** | asyncio burst | N=20–50 concurrent requests, 2σ anomaly detection |
 | **API key discovery** | Bounded wordlist | ROE-gated, rate-limited, 50-key max |
@@ -37,6 +42,8 @@
 | **Kali automation** | 13 tools + WAF evasion | nmap, nikto, sqlmap, nuclei, ffuf, amass, feroxbuster + more |
 | **Chain execution** | ROE-gated sandbox | Replay attack chains with real session tokens (Juice Shop / DVWA) |
 | **Post-exploit sim** | Docker sandbox | Data-exfil, persistence, C2 feasibility — simulate only |
+| **Immutable audit log** | SHA-256 hash chain | Tamper-evident engagement log, GPG/HMAC manifest signing |
+| **Plugin SDK** | BaseModule ABC + PluginRegistry | Write custom probes, auto-discovered at runtime |
 | **Reporting** | CISSP-voice Markdown / JSON / SARIF | Bug bounty + pentest report formats |
 
 ## Quick start
@@ -51,6 +58,12 @@ cp roe.example.yaml roe.yaml
 
 # Full red-team pipeline (default phases: osint → niche → active → chain → postex)
 swiftsec redteam --roe roe.yaml --target https://your-authorized-target.com
+
+# Agentic mode — Sonnet drives the engagement autonomously
+swiftsec redteam --roe roe.yaml --target https://your-authorized-target.com --agentic
+
+# Watch live agent progress
+swiftsec agent-status
 
 # With local repo (static scan + exploit chains)
 swiftsec redteam --roe roe.yaml --target https://your-authorized-target.com --repo ./my-app
@@ -82,6 +95,17 @@ swiftsec payload remove --vuln-type xss --payload "<script>alert(1)</script>"
 # Execute a validated attack chain (sandbox only)
 swiftsec chain --execute CHAIN-001 --roe roe.yaml
 
+# Audit log — verify hash chain integrity
+swiftsec audit verify --log ~/.swift/engagements/<id>/audit.jsonl
+
+# Audit log — export engagement report
+swiftsec audit export --log ~/.swift/engagements/<id>/audit.jsonl --out report.md
+
+# Plugin SDK — manage custom probe modules
+swiftsec plugin list
+swiftsec plugin install ./my_probe/
+swiftsec plugin validate ./my_probe/
+
 # Interactive wizard
 swiftsec wizard
 ```
@@ -100,6 +124,11 @@ allowed_techniques:
   - active_scan
   - exploit
   - post_exploit
+  - oob_ssrf        # v6.0 — OOB SSRF with callback server
+  - oauth_attack    # v6.0 — OAuth/OIDC attack probes
+  - websocket_attack # v6.0 — WebSocket attack probes
+  - bizlogic        # v6.0 — Business logic probes
+  - agentic_loop    # v6.0 — Autonomous agentic pentesting
 window_start: "2026-01-01T00:00:00"
 window_end:   "2026-12-31T23:59:59"
 contact:      "you@yourorg.com"
@@ -113,6 +142,87 @@ SWIFT **hard fails** (`[DENY]` + exit 2) when ROE is missing or when:
 - Current time outside `window_start` / `window_end`
 
 `allow_chain_execution: true` enables live chain replay — only effective against Juice Shop / DVWA.
+
+## v6.0 highlights
+
+### Agentic Red-Team Loop
+
+`RedTeamAgent` runs Sonnet in a tool-use loop, autonomously selecting probes, forming hypotheses, and chaining findings — without operator intervention.
+
+```
+swiftsec redteam --roe roe.yaml --target https://target.com --agentic
+```
+
+Features: plateau detection (stops when last 5 calls return nothing new), budget gates (`SWIFT_AGENT_BUDGET_PROBES`, `SWIFT_AGENT_BUDGET_SONNET_CALLS`), automatic context compression at 20+ turns, full audit trail per iteration.
+
+### OOB SSRF with Confirmed Callbacks
+
+`OOBSSRFProbe` starts an async TCP listener, allocates per-injection tokens, injects callback URLs into target parameters, and waits for real HTTP callbacks. Cloud metadata bypass variants included (AWS IMDS, GCP metadata, Azure IMDS).
+
+```
+Confirmed: OOB SSRF at param 'url' — callback received from 10.0.0.5 (source_ip)
+```
+
+Set `INTERACTSH_URL` to route callbacks through Interactsh instead of local listener (required when target can't reach your machine directly).
+
+### OAuth/OIDC Attack Probe
+
+Five distinct attacks per OAuth surface discovered:
+- **PKCE downgrade** — strips `code_challenge`, checks if server accepts plain auth codes
+- **redirect_uri manipulation** — tests open redirectors and unvalidated redirect targets
+- **Token leakage recon** — checks Referer/fragment leakage via implicit flow
+- **Credential stuffing** — ROE-gated, rate-limited password spray
+- **Implicit flow abuse** — forces token in fragment, checks for leakage
+
+### WebSocket Attack Probe
+
+Five attack categories against discovered WebSocket endpoints:
+- **CSWSH** (Cross-Site WebSocket Hijacking) — forge unauthenticated upgrades from cross-origin
+- **Unauthenticated upgrade** — test WS without session cookie/token
+- **IDOR over WS** — mutate numeric/UUID IDs in message payloads
+- **Injection** — SQLi, XSS, SSTI payloads over WS messages
+- **Namespace abuse** — join unauthorized rooms/channels
+
+### Business Logic Probe
+
+Sonnet analyzes the target's workflow to identify multi-step logic flaws, then executes Playwright-driven attacks:
+- Price manipulation (negative/zero quantities, parameter tampering)
+- Coupon stacking via asyncio race condition (N=20 concurrent requests)
+- Workflow step skipping (jump to checkout without cart validation)
+- Privilege escalation via role parameter manipulation
+
+### Immutable Audit Log
+
+Every engagement writes a SHA-256 hash-chained JSONL log. Each entry links to the previous via `prev_hash` — any tampered entry is immediately detectable.
+
+```bash
+swiftsec audit verify --log ~/.swift/engagements/ENG-001/audit.jsonl
+# Chain valid: 142 entries checked, no tampering detected
+
+swiftsec audit export --log ~/.swift/engagements/ENG-001/audit.jsonl --out report.md
+```
+
+Credentials are redacted from all log entries automatically (Bearer tokens, API keys, passwords).
+
+### Plugin SDK
+
+Write custom probes in ~50 lines by extending `BaseModule`:
+
+```python
+from sdk.base import BaseModule, Finding, Phase, VulnType, Severity
+from sdk.decorators import roe_gated
+
+class MyProbe(BaseModule):
+    name = "my_probe"
+    phase = Phase.ACTIVE
+    vuln_types = [VulnType.SSRF]
+
+    @roe_gated("active_scan")
+    async def probe(self, target, session, roe) -> list[Finding]:
+        ...
+```
+
+Drop into any directory, run `swiftsec plugin install ./my_probe/` — auto-discovered via `PluginRegistry`. Decorators: `@roe_gated`, `@cached_result`, `@retry`. Test harness: `SwiftTestHarness` with `MockSessionManager`. Full tutorial: [`docs/sdk/WRITING_A_MODULE.md`](swift/docs/sdk/WRITING_A_MODULE.md).
 
 ## v5.0 highlights
 
@@ -176,7 +286,9 @@ All LLM prompts now use offensive attacker framing:
 
 | Command | ROE YAML | Notes |
 |---------|:--------:|-------|
-| `redteam` | Required | Full pipeline, all 6 phases |
+| `redteam` | Required | Full pipeline, all phases |
+| `redteam --agentic` | Required | Autonomous Sonnet-driven loop |
+| `agent-status` | — | Live agentic loop progress |
 | `osint` | Required | 10-source recon only |
 | `niche <target>` | — | OSINT → niche classification |
 | `scan` | — | Static codebase scan |
@@ -187,6 +299,9 @@ All LLM prompts now use offensive attacker framing:
 | `web-scan` | — | Playwright active probe |
 | `payload add\|list\|remove` | — | Manage custom payload library |
 | `chain --execute` | Required | Replay chain (sandbox only) |
+| `audit verify` | — | Verify hash chain integrity |
+| `audit export` | — | Export engagement report |
+| `plugin list\|install\|remove\|validate` | — | Manage custom probe modules |
 | `attack-sim` | — | MITRE-mapped Kali run |
 | `live-feed` | — | NVD + CISA KEV stream |
 | `privesc` | — | Docker privesc (--allow-privesc) |
@@ -194,7 +309,7 @@ All LLM prompts now use offensive attacker framing:
 
 ## Active probe types
 
-XSS · SQLi · SSRF · SSTI · IDOR · JWT alg:none · XXE · CRLF · NoSQL · Prototype Pollution · Auth Bypass · HTTP Smuggling · GraphQL · Race Condition · API Key Discovery · DOM IDOR
+XSS · SQLi · SSRF · OOB SSRF · SSTI · IDOR · JWT alg:none · XXE · CRLF · NoSQL · Prototype Pollution · Auth Bypass · HTTP Smuggling · GraphQL · Race Condition · API Key Discovery · DOM IDOR · OAuth/OIDC · WebSocket · Business Logic
 
 ## Credential chaining
 
@@ -258,6 +373,10 @@ cp swift/.env.example .env
 | `NVD_API_KEY` | Optional | NVD CVE feed (higher rate limit) |
 | `HUNTER_API_KEY` | Optional | hunter.io email enumeration |
 | `SWIFT_ROE` | Optional | Default ROE file path |
+| `INTERACTSH_URL` | Optional | Route OOB callbacks through Interactsh (v6.0) |
+| `SWIFT_GPG_KEY_ID` | Optional | GPG key ID for engagement manifest signing (v6.0) |
+| `SWIFT_AGENT_BUDGET_PROBES` | Optional | Max probe calls per agentic engagement (v6.0) |
+| `SWIFT_AGENT_BUDGET_SONNET_CALLS` | Optional | Max Sonnet calls per agentic engagement (v6.0) |
 
 ## Safety guarantees
 
@@ -267,6 +386,8 @@ cp swift/.env.example .env
 - No host filesystem mounts during offensive runs
 - Post-exploit: simulate-only by default, enforced by ROE
 - Code scan sandbox: `--network=none`, read-only FS, 2-core / 2 GB / 30 s
+- Agentic loop: budget gates prevent runaway API spend; plateau detection stops stalled loops
+- Audit log: SHA-256 hash chain — tampered entries detected on `audit verify`
 - **Only reports findings with confidence ≥ 95%**
 
 ## CI/CD integration
@@ -289,7 +410,7 @@ swiftsec scan ./repo | jq '.findings[] | select(.severity == "CRITICAL")'
 
 ## Docs
 
-Full architecture: [`docs/README.md`](docs/README.md)
+Full architecture: [`docs/README.md`](docs/README.md) · Plugin SDK tutorial: [`docs/sdk/WRITING_A_MODULE.md`](swift/docs/sdk/WRITING_A_MODULE.md)
 
 ## Contributing
 
