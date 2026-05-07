@@ -1,5 +1,27 @@
 # Changelog
 
+## [6.0.0.0] — 2026-05-07
+
+### Added
+- **OOB SSRF Probe** — async `OOBCallbackServer` + Interactsh integration; cloud metadata bypass (AWS/GCP/Azure); confirms SSRF via real out-of-band TCP callbacks
+- **OAuth/OIDC Attack Probe** — 5 attacks: PKCE downgrade, redirect_uri manipulation, token leakage recon, credential stuffing, implicit flow abuse
+- **WebSocket Attack Probe** — 5 attacks: CSWSH, unauthenticated upgrade, IDOR, injection, namespace abuse
+- **Business Logic Probe** — Sonnet-powered flow analysis + 5 Playwright executors: price manipulation, coupon stacking race condition, workflow step skipping, negative quantity, privilege escalation
+- **Agentic Red-Team Loop** — `RedTeamAgent` Sonnet tool-use autonomous loop with plateau detection, budget gates, context compression, and full audit trail; CLI: `swiftsec redteam --agentic`
+- **Immutable Audit Log** — SHA-256 / HMAC-SHA256 keyed hash chain per engagement, tamper detection, 10 MB rotation, automatic credential redaction; CLI: `swiftsec audit verify|export`
+- **Plugin SDK** — `BaseModule` ABC, `Finding` dataclass, `@roe_gated` / `@cached_result` / `@retry` decorators, `PluginRegistry` auto-discovery, migration adapters for all existing browser probes; CLI: `swiftsec plugin list|install|remove|validate`
+- New ROE techniques: `oob_ssrf`, `oauth_attack`, `websocket_attack`, `bizlogic`, `agentic_loop`
+- `chain_primitive` + `oob_confirmed` fields on `Vulnerability` dataclass
+- `SWIFT_AUDIT_HMAC_KEY` env var — opt-in forge-resistant hash chain
+- `INTERACTSH_URL` validation at startup (must be `https://`, non-localhost)
+- Scope enforcement in agentic tool dispatch — off-scope probe targets blocked
+
+### Security
+- All 13 GitHub Actions pinned to commit SHAs (supply chain hardening)
+- Nuclei pinned to v3.3.9 with SHA-256 checksum verification in Dockerfile
+- `OOBCallbackServer` memory cap (1 000 tokens), token + request size bounds
+- `INTERACTSH_URL` validated at startup against attacker-controlled server injection
+
 ## v3.0.0 — Red-Team Automation Pentester (2026-05-04)
 ### Breaking Changes
 - Removed `patch`, `validate`, `--allow-patch-generation` commands and flags
