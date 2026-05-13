@@ -18,8 +18,6 @@ import time
 from dataclasses import asdict
 from typing import Any, List, Optional
 
-import psutil
-
 from agent.models import AttackStep, ExploitChain, Vulnerability
 from log.logger import get_logger
 
@@ -32,6 +30,7 @@ _MEMORY_SAFE_THRESHOLD_MB: int = 500
 def _is_memory_safe(label: str) -> bool:  # noqa: ARG001
     """Return True if process RSS is below the safety threshold."""
     try:
+        import psutil
         rss_mb = psutil.Process().memory_info().rss / 1024 / 1024
         return rss_mb < _MEMORY_SAFE_THRESHOLD_MB
     except Exception:  # noqa: BLE001
