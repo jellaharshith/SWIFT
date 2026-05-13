@@ -27,9 +27,9 @@
 - [ ] Run on one real HackerOne public program target
 
 ## Post-Phase 2: Marketing
-- [ ] Record demo GIF of SWIFT TUI finding a CRITICAL vuln on Juice Shop (use asciinema or ttygif)
-- [ ] Add GIF to README below badges with caption "New here? → [QUICKSTART.md]"
-- [ ] Reconcile docs drift: swift/README.md says v3.0, top README says v7.0
+- [x] Record demo GIF of SWIFT TUI finding a CRITICAL vuln on Juice Shop — `docs/demo.gif` (1.3MB, 900x380, VHS+gifsicle, scripts/demo.tape)
+- [x] Add GIF placeholder to README below badges with caption "New here? → [QUICKSTART.md]" — replace `docs/demo.gif` after recording
+- [x] Reconcile docs drift: swift/README.md bumped v3.0→v7.0, feature table updated to v7 capabilities
 
 ---
 
