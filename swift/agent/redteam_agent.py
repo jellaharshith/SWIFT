@@ -129,13 +129,14 @@ class RedTeamAgent:
         return not self.budget.is_exhausted()
 
     def _plateau_detected(self) -> bool:
-        """Sliding window: last 5 tool calls all returned empty/low-confidence."""
-        window = self._probe_history[-5:]
-        if len(window) < 5:
+        """Sliding window: last 8 tool calls all returned empty/low-confidence."""
+        window = self._probe_history[-8:]
+        if len(window) < 8:
             return False
-        # Same probe+target called >3 times
         counter = Counter(window)
-        if any(v > 3 for v in counter.values()):
+        if any(v > 5 for v in counter.values()):
+            # Fallback: mark current vectors exhausted, try unexplored
+            self.exhausted_vectors.update(set(window))
             return True
         return False
 

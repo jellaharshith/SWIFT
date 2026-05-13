@@ -1,3 +1,38 @@
+# SWIFT Full Stack DX Overhaul — Next Up
+
+## Phase 1A: CTF Golden Path (Days 1-2) — DONE ✅
+- [x] Add `[ctf]` extras alias in `pyproject.toml` = `web + oob` — prerequisite for golden path
+- [x] Add `swiftsec init --ctf <target>` subcommand in `swift/swift_cli.py` — generates pre-filled `roe.yaml` for Juice Shop/DVWA/Metasploitable from `swift/config/ctf_targets.py`
+- [x] Add pre-flight reachability check + Playwright install check in `run_redteam()` / `run_web_scan()` — fast-fail with hint (`docker run -p 3000:3000 bkimminich/juice-shop`)
+- [x] Create `docs/QUICKSTART.md` — 5-command Juice Shop tutorial using `pip install "swiftsec[ctf]"` + `web-scan --live`
+- [x] Add `[ctf] = web + oob` to `pyproject.toml` optional-dependencies
+
+## Phase 1B: Scan Quality + Feedback (Days 3-5) — DONE ✅
+- [ ] Measure Juice Shop baseline TTHW before plateau fix (run `scripts/benchmark_tthw.sh`)
+- [x] Fix plateau detection in `swift/agent/redteam_agent.py:131` — expand window 5→8, add fallback to unexplored vector
+- [x] Add ScanEventBus (event callback system) — `swift/events/bus.py`, module-level singleton, Phase 2 TUI subscribes to same events
+- [x] Fix top 5 first-run error messages — add problem + cause + exact fix command: ROE not found, API key missing, target unreachable, Playwright not installed, scan.json not found (in `_fail_closed()`)
+- [x] Add Rich terminal summary by default in `run_redteam()` / `run_web_scan()` — `--json` flag for raw JSON stdout
+- [x] Add `scripts/benchmark_tthw.sh` — times full Juice Shop clean-room run (fresh venv, pinned env, time-to-first-finding)
+
+## Phase 2: Rich TUI + CLI Polish (Week 2) — DONE ✅
+- [x] Build Rich TUI dashboard — `swift/cli/tui.py`, ScanEventBus subscriber, `--live` flag
+- [ ] Group `swiftsec --help` by category (Getting Started / Red Team / Intel / Plugins / Utilities) using argparse groups
+- [x] Deprecate `triage` (alias for `scan`) and `full` (alias for `full-scan`) with deprecation warnings — hard remove in v8
+- [x] Add `swiftsec web-scan --live` as the CTF golden path command (update quickstart + README)
+
+## Phase 3: Wizard + Bug Bounty (Week 3) — DONE ✅
+- [x] `swiftsec init` interactive Rich wizard — prompts target URL, techniques, window dates, generates roe.yaml
+- [x] HackerOne scope JSON validation — `swiftsec init --bugbounty <program.json>`, fnmatch wildcard, fail-closed (`swift/config/hackerone_validator.py`)
+- [ ] Run on one real HackerOne public program target
+
+## Post-Phase 2: Marketing
+- [ ] Record demo GIF of SWIFT TUI finding a CRITICAL vuln on Juice Shop (use asciinema or ttygif)
+- [ ] Add GIF to README below badges with caption "New here? → [QUICKSTART.md]"
+- [ ] Reconcile docs drift: swift/README.md says v3.0, top README says v7.0
+
+---
+
 # SWIFT v7.0 Release — SHIPPED ✅ (2026-05-12)
 
 ## Session Summary
