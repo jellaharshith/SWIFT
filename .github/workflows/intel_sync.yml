@@ -1,0 +1,34 @@
+name: Intel Sync
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.swift/intel
+          key: swift-intel-${{ github.run_id }}
+          restore-keys: swift-intel-
+
+      - name: Install SWIFT with intel extras
+        run: pip install -e ".[intel]"
+        working-directory: swift
+
+      - name: Run intel sync
+        run: swiftsec intel sync
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HIBP_API_KEY: ${{ secrets.HIBP_API_KEY }}
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
