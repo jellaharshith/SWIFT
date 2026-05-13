@@ -1,0 +1,32 @@
+# SWIFT Rules of Engagement (ROE) — Example Template
+# Rename to roe.yaml and customize before running any red-team commands.
+
+engagement_id: "SWIFT-ENG-001"
+
+# Targets in scope — hostnames, IPs, CIDRs, or URL prefixes
+authorized_targets:
+  - "http://localhost:3000"
+  - "127.0.0.1"
+  - "192.168.1.0/24"
+
+# Techniques permitted for this engagement
+# Options: osint, active_scan, exploit, post_exploit
+allowed_techniques:
+  - osint
+  - active_scan
+  - exploit
+  - post_exploit
+
+# Engagement window (ISO 8601 format, UTC)
+window_start: "2026-01-01T00:00:00"
+window_end:   "2027-12-31T23:59:59"
+
+# Point of contact (name or email of authorized party)
+contact: "your-name@your-org.com"
+
+# Maximum runtime per command in seconds (default 30 min)
+max_runtime_seconds: 1800
+
+# If true: all post-exploit modules simulate only (never perform real exfil/persistence/C2)
+# Set to false only on isolated lab environments you fully own.
+simulate_only: true

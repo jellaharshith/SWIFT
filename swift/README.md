@@ -16,19 +16,21 @@
 ╚══════╝ ╚══╝╚══╝ ╚═╝╚═╝        ╚═╝
 
   AI-Powered Red-Team Automation Pentester
-  v3.0.0 · mode: red-team
+  v7.0.0 · CISSP/OSCP-grade · Continuous Intelligence + Extended Attack Coverage
 ```
 
-## What SWIFT does
+## What SWIFT does (v7.0)
 
 | Phase | Tools | Result |
 |-------|-------|--------|
-| **OSINT** | DNS recon, subfinder, crt.sh, GitHub dorks, Shodan, WHOIS | Target intel before first packet |
+| **OSINT** | DNS recon, crt.sh, Wayback, tech fingerprint, subdomain takeover, GitHub dorks, Shodan, WHOIS | Target intel before first packet |
 | **Triage** | Claude Haiku | Flags suspicious code patterns (~50ms/file) |
 | **Active probes** | Playwright + Claude Sonnet | 12 vuln types confirmed at ≥95% confidence |
 | **Credential chains** | SessionManager | JWT/cookie reuse across SQLi → auth → IDOR → privesc |
-| **LLM payloads** | Claude Haiku | Context-aware payload mutation, WAF-bypassing variants |
-| **Kali automation** | 13 tools + WAF evasion | nmap, nikto, sqlmap, nuclei, ffuf, amass, feroxbuster + more |
+| **LLM payloads** | LLMPayloadMutator + Haiku | Context-aware WAF-bypass variants per tech stack |
+| **Intel Engine** | 10-source RAG (MITRE, ExploitDB, Nuclei, HackerOne…) | ChromaDB + MiniLM embeddings injected into every Sonnet prompt |
+| **Extended probes** | Cloud SSRF, supply chain, credential breach, mobile static, AD, network service | ROE-gated per technique |
+| **Kali Suite** | impacket, metasploit, crackmapexec, openvas, semgrep + 13 WAF-evading tools | Kali container, --network=none sandbox |
 | **Post-exploit sim** | Docker sandbox | Data-exfil, persistence, C2 feasibility — simulate only |
 | **Reporting** | Markdown / JSON / SARIF | Bug bounty + pentest report formats |
 
