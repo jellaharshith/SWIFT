@@ -44,9 +44,10 @@ jobs:
         continue-on-error: true
 
       - name: Run tests
-        run: pytest -m "not slow and not e2e and not integration" --cov=. --cov-report=xml --cov-report=term-missing
+        run: pytest -m "not slow and not e2e and not integration" --cov=. --cov-report=xml --cov-report=term-missing --cov-fail-under=40
         env:
           SWIFT_NO_BANNER: "1"
+          ANTHROPIC_API_KEY: "sk-test-placeholder"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
