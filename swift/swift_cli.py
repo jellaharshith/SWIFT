@@ -922,27 +922,34 @@ def run_version(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def run_update(args: argparse.Namespace) -> dict[str, Any]:
-    """Upgrade swiftsec via pip."""
+    """Upgrade swiftsec via pipx or pip, depending on how it was installed."""
+    import shutil
     import subprocess
 
     check_only = getattr(args, "check", False)
 
     if check_only:
-        # Delegate to run_version with --check
         import types
         v_args = types.SimpleNamespace(check=True)
         return run_version(v_args)
 
-    print("Upgrading swiftsec...")
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--upgrade", "swiftsec"],
-        capture_output=False,
-    )
+    # Detect pipx install: executable lives inside a pipx venv
+    in_pipx = ".local/pipx/venvs" in sys.executable or "pipx" in sys.executable
+
+    if in_pipx and shutil.which("pipx"):
+        print("Upgrading swiftsec via pipx...")
+        result = subprocess.run(["pipx", "upgrade", "swiftsec"], capture_output=False)
+    else:
+        print("Upgrading swiftsec via pip...")
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "swiftsec"],
+            capture_output=False,
+        )
+
     if result.returncode != 0:
         print("Upgrade failed.", file=sys.stderr)
         sys.exit(result.returncode)
 
-    # Show new version
     from swift import __version__
     print(f"\nswiftsec upgraded successfully → {__version__}")
     return {"status": "ok"}
