@@ -7,6 +7,10 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+<p align="center">
+  <img src="docs/swiftsec-banner.svg" alt="SWIFTSEC" width="860"/>
+</p>
+
 ![SWIFTSEC TUI finding CRITICAL vulnerability on Juice Shop](docs/demo.gif)
 
 > **New here?** Start with the [Quickstart Guide →](docs/QUICKSTART.md)
