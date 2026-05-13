@@ -179,6 +179,14 @@ async def run_bounty_engagement(
             except (ImportError, Exception) as exc:
                 log_step("phase_novel_skip", {"reason": str(exc)})
 
+        # Calibrate confidence before gate
+        try:
+            from agent.confidence_calibrator import ConfidenceCalibrator
+            _cal = ConfidenceCalibrator()
+            findings = _cal.calibrate_batch(findings)
+        except Exception:
+            pass
+
         # Confidence gate: 95%
         confirmed = [f for f in findings if f.confidence >= 0.95]
         log_step("confidence_gate", {

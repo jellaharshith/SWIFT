@@ -674,7 +674,120 @@ def build_parser() -> argparse.ArgumentParser:
         help="Path to engagement dir (default: latest ~/.swift/engagements/*)",
     )
 
+    auto_p = sub.add_parser(
+        "auto",
+        help="One-command auto mode: detect H1 program, validate scope, run pipeline, submit reports.",
+    )
+    auto_p.add_argument("--target", required=True, help="Full target URL (e.g. https://mystore.com).")
+    auto_p.add_argument(
+        "--h1-token",
+        default=None,
+        help="HackerOne API token. Falls back to H1_API_TOKEN env var.",
+    )
+    auto_p.add_argument(
+        "--h1-identifier",
+        default=None,
+        help="HackerOne username. Falls back to H1_USERNAME env var.",
+    )
+    auto_p.add_argument("--out-dir", default="output", help="Output directory for reports and ROE.")
+    auto_p.add_argument(
+        "--min-confidence",
+        type=float,
+        default=0.9,
+        help="Min finding confidence (0.0-1.0) for H1 submission (default: 0.9).",
+    )
+    auto_p.add_argument(
+        "--h1-program",
+        default=None,
+        help="H1 program handle (e.g. shopify) to skip auto-discovery.",
+    )
+
+    # ── Intel engine ──────────────────────────────────────────────────────────
+    intel_p = sub.add_parser("intel", help="Intel engine: sync, search, status, version")
+    intel_sub = intel_p.add_subparsers(dest="intel_cmd", required=True)
+
+    intel_sync = intel_sub.add_parser("sync", help="Sync intel from all 10 sources")
+    intel_sync.add_argument("--sources", default=None,
+                            help="Comma-separated source names (default: all)")
+    intel_sync.add_argument("--force", action="store_true",
+                            help="Force sync even if last sync was < 24h ago")
+    intel_sync.add_argument("--dry-run", action="store_true",
+                            help="Show what would be synced without writing")
+
+    intel_search = intel_sub.add_parser("search", help="Search intel knowledge base")
+    intel_search.add_argument("query", help="Search query")
+    intel_search.add_argument("--n", type=int, default=10, help="Number of results")
+    intel_search.add_argument("--output", choices=["json", "text"], default="text")
+
+    intel_sub.add_parser("status", help="Show intel KB status (doc count, last sync)")
+
+    intel_ver = intel_sub.add_parser("version", help="Intel KB version management")
+    intel_ver.add_argument("--list", action="store_true", help="List versions")
+    intel_ver.add_argument("--rollback", default=None, metavar="ID",
+                           help="Roll back to version ID")
+
     return parser
+
+
+def run_intel(args: argparse.Namespace) -> dict[str, Any]:
+    """Intel engine CLI — sync, search, status, version."""
+    subcmd = args.intel_cmd
+
+    if subcmd == "sync":
+        from intel.sync.scheduler import IntelSyncScheduler
+        sources = [s.strip() for s in args.sources.split(",")] if args.sources else None
+        if getattr(args, "dry_run", False):
+            from intel.sync.scheduler import SOURCE_REGISTRY
+            targets = sources or list(SOURCE_REGISTRY.keys())
+            print(f"[dry-run] Would sync: {', '.join(targets)}")
+            return {"status": "dry-run", "sources": targets}
+        scheduler = IntelSyncScheduler()
+        report = asyncio.run(scheduler.sync_all(sources=sources, force=args.force))
+        return {
+            "status": "ok",
+            "sources_synced": report.sources_synced,
+            "docs_added": report.docs_added,
+            "errors": report.errors,
+        }
+
+    elif subcmd == "search":
+        from intel.query.retriever import IntelRetriever
+        r = IntelRetriever()
+        results = r.query(args.query, n=args.n)
+        if args.output == "json":
+            return {"results": results}
+        for i, res in enumerate(results, 1):
+            meta = res.get("metadata", {})
+            print(f"\n[{i}] {meta.get('title', '(no title)')} — {meta.get('source', '')}")
+            print(res["content"][:300])
+        return {"status": "ok", "count": len(results)}
+
+    elif subcmd == "status":
+        from intel.store.metadata_index import MetadataIndex
+        idx = MetadataIndex()
+        from intel.sync.scheduler import SOURCE_REGISTRY
+        status_rows = []
+        for source in SOURCE_REGISTRY:
+            last = idx.get_last_sync(source)
+            status_rows.append({
+                "source": source,
+                "last_synced": last.isoformat() if last else "never",
+            })
+        return {"status": "ok", "sources": status_rows}
+
+    elif subcmd == "version":
+        from intel.sync.version_tracker import IntelVersionTracker
+        tracker = IntelVersionTracker()
+        if args.rollback:
+            tracker.rollback(args.rollback)
+            return {"status": "ok", "rolled_back_to": args.rollback}
+        versions = tracker.list_versions()
+        if getattr(args, "list", False) or True:
+            for v in versions:
+                print(f"{v['version_id']}  {v['timestamp']}  docs={v.get('doc_count', '?')}")
+        return {"status": "ok", "versions": versions}
+
+    return {"status": "error", "message": f"Unknown intel subcommand: {subcmd}"}
 
 
 def run_web_scan(args: argparse.Namespace) -> dict[str, Any]:
@@ -862,6 +975,41 @@ def run_chain_execute(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def run_auto(args: argparse.Namespace) -> dict[str, Any]:
+    """Run the full auto-mode workflow against an H1 program target."""
+    import os
+    from auto_workflow import run_auto_workflow
+
+    h1_token = args.h1_token or os.environ.get("H1_API_TOKEN", "")
+    h1_username = args.h1_identifier or os.environ.get("H1_USERNAME", "")
+
+    if not h1_token:
+        _fail_closed("H1 API token required. Pass --h1-token or set H1_API_TOKEN env var.")
+    if not h1_username:
+        _fail_closed("H1 username required. Pass --h1-identifier or set H1_USERNAME env var.")
+
+    result = asyncio.run(
+        run_auto_workflow(
+            args.target,
+            h1_token,
+            h1_username,
+            min_confidence=args.min_confidence,
+            out_dir=args.out_dir,
+            program_handle=getattr(args, "h1_program", None),
+        )
+    )
+    return {
+        "status": "ok",
+        "target": result.target,
+        "program": result.program_handle,
+        "findings_total": result.findings_total,
+        "findings_submitted": result.findings_submitted,
+        "h1_report_urls": result.h1_report_urls,
+        "elapsed_seconds": result.elapsed_seconds,
+        "engagement_id": result.engagement_id,
+    }
+
+
 def main() -> None:
     from log.logger import get_logger
     from cli.repl import run_repl, NO_JSON_DUMP_CMDS
@@ -890,6 +1038,7 @@ def main() -> None:
             "chain": run_chain_execute,
             "version": run_version,
             "update": run_update,
+            "auto": run_auto,
         }
         sys.exit(run_repl(parser, handlers))
 
@@ -909,7 +1058,7 @@ def main() -> None:
     _V6_NO_ZERO_TRUST = {"audit", "plugin", "agent-status"}
     if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan",
                              "wizard", "web-scan", "privesc", "redteam", "osint",
-                             "payload", "niche", "chain", "version", "update"} | _V6_NO_ZERO_TRUST:
+                             "payload", "niche", "chain", "version", "update", "auto"} | _V6_NO_ZERO_TRUST:
         _ensure_zero_trust(args)
 
     # v6.0 commands handled inline (no JSON dump)
@@ -927,6 +1076,12 @@ def main() -> None:
     if args.command == "agent-status":
         from agent.redteam_agent import show_agent_status
         show_agent_status(args)
+        return
+
+    if args.command == "intel":
+        payload = run_intel(args)
+        if args.command not in NO_JSON_DUMP_CMDS:
+            print(json.dumps(payload, indent=2, sort_keys=True))
         return
 
     handlers = {
@@ -948,6 +1103,8 @@ def main() -> None:
         "chain": run_chain_execute,
         "version": run_version,
         "update": run_update,
+        "auto": run_auto,
+        "intel": run_intel,
     }
     try:
         payload = handlers[args.command](args)

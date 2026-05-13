@@ -14,6 +14,26 @@ MODELS = {
 }
 
 # Embed verbatim from spec
+async def build_intel_enriched_prompt(
+    tech_stack: list[str],
+    target_url: str,
+    vuln_types: list[str],
+    budget_tokens: int = 2000,
+) -> str:
+    """Build RAG-enriched context string from ChromaDB for Sonnet prompt injection."""
+    import asyncio
+    try:
+        from intel.query.retriever import IntelRetriever
+        retriever = IntelRetriever()
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: retriever.query_for_target(tech_stack, vuln_types, target_url, budget_tokens),
+        )
+    except Exception:
+        return ""
+
+
 AGENT_SYSTEM_PROMPT = """You are an expert red-team operator with OSCP and CISSP certifications conducting an authorized penetration test. Your mission: systematically compromise the target by chaining vulnerabilities. Think like an attacker, operate like an engineer.
 
 STRATEGY:

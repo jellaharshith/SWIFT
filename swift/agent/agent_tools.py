@@ -23,6 +23,8 @@ TOOL_SCHEMAS = [
                     "enum": [
                         "ssrf", "oob_ssrf", "sqli", "xss", "oauth", "websocket",
                         "idor", "graphql", "race_condition", "bizlogic", "jwt", "api_key",
+                        "cloud_aws", "supply_chain", "credential_check",
+                        "mobile_static", "active_directory", "network_service",
                     ],
                     "description": "Name of the probe to run",
                 },

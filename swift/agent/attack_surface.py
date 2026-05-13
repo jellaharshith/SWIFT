@@ -27,13 +27,19 @@ async def build_attack_surface(target: str, recon_result) -> AttackSurface:
 
     subdomains = _list(recon_result, "subdomains", "discovered_subdomains")
 
+    # Strip protocol from target so f"https://{target}" never double-prefixes
+    bare_target = target
+    for prefix in ("https://", "http://"):
+        if bare_target.startswith(prefix):
+            bare_target = bare_target[len(prefix):]
+
     # Build endpoint list from discovered subdomains + high-value common paths
-    base_urls = [f"https://{s}" for s in subdomains] + [f"https://{target}"]
+    base_urls = [f"https://{s}" for s in subdomains] + [f"https://{bare_target}"]
     common_paths = [
         "/login", "/api", "/admin", "/graphql", "/api/v1", "/api/v2",
         "/auth", "/oauth", "/token", "/signup", "/register", "/api/auth",
     ]
-    endpoints = base_urls + [f"https://{target}{p}" for p in common_paths]
+    endpoints = base_urls + [f"https://{bare_target}{p}" for p in common_paths]
 
     auth_keywords = ["login", "auth", "token", "signin", "oauth", "session", "signup", "register"]
     auth_endpoints = [u for u in endpoints if any(k in u.lower() for k in auth_keywords)]
