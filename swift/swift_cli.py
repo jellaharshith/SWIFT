@@ -49,8 +49,58 @@ def _artifact_paths(repo: Path) -> tuple[Path, Path]:
     return base, base / "audit.log.jsonl"
 
 
+_ERRORS = {
+    "roe_not_found": (
+        "ROE file not found.\n"
+        "  Fix: swiftsec init --ctf juice-shop  (or create roe.yaml manually)"
+    ),
+    "api_key_missing": (
+        "ANTHROPIC_API_KEY not set.\n"
+        "  Fix: export ANTHROPIC_API_KEY=sk-ant-..."
+    ),
+    "target_unreachable": (
+        "Target unreachable.\n"
+        "  Fix: Is the target running? Try: docker run -p 3000:3000 bkimminich/juice-shop"
+    ),
+    "playwright_not_installed": (
+        "Playwright not installed.\n"
+        "  Fix: pip install 'swiftsec[web]' && playwright install chromium"
+    ),
+    "scan_json_not_found": (
+        "scan.json not found.\n"
+        "  Fix: Run a scan first: swiftsec web-scan <target>"
+    ),
+}
+
+
 def _fail_closed(message: str) -> None:
-    raise SystemExit(f"[DENY] {message}")
+    """Fail with a user-friendly error: problem + cause + fix."""
+    import sys as _sys
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console(stderr=True)
+        console.print(Panel(f"[red][DENY][/red] {message}", title="SWIFT Error", border_style="red"))
+    except ImportError:
+        print(f"[DENY] {message}", file=_sys.stderr)
+    raise SystemExit(1)
+
+
+def _print_scan_summary(payload: dict[str, Any]) -> None:
+    """Print Rich terminal summary of scan results."""
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        console = Console()
+        findings = payload.get("findings", [])
+        count = len(findings) if isinstance(findings, list) else findings
+        table = Table(title="Scan Summary")
+        table.add_column("Status", style="green")
+        table.add_column("Findings", style="yellow")
+        table.add_row(payload.get("status", "ok"), str(count))
+        console.print(table)
+    except ImportError:
+        pass  # rich not available, skip
 
 
 def _load_config(config_path: str | None) -> dict[str, Any]:
@@ -103,6 +153,11 @@ def run_scan(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def run_triage(args: argparse.Namespace) -> dict[str, Any]:
+    import warnings
+    warnings.warn(
+        "'triage' is deprecated and will be removed in v8. Use 'scan' instead.",
+        DeprecationWarning, stacklevel=2,
+    )
     return run_scan(args)
 
 
@@ -112,6 +167,19 @@ def run_redteam(args: argparse.Namespace) -> dict[str, Any]:
 
     from agent.redteam_orchestrator import execute_redteam, save_redteam_artifact
     from config.consent import require_consent
+
+    # Pre-flight: target reachability
+    import httpx
+    target_url = getattr(args, "target", None)
+    if target_url:
+        try:
+            httpx.get(target_url, timeout=5.0)
+        except Exception as e:
+            _fail_closed(
+                f"Target unreachable: {target_url}\n"
+                f"  Cause: {e}\n"
+                f"  Hint: Is the target running? Try: docker run -p 3000:3000 bkimminich/juice-shop"
+            )
 
     require_consent(args)
     log_step("cli.redteam.start", roe=args.roe, target=getattr(args, "target", None),
@@ -148,6 +216,9 @@ def run_redteam(args: argparse.Namespace) -> dict[str, Any]:
     save_redteam_artifact(payload, out_path)
     payload["artifact"] = str(out_path.resolve())
     log_step("cli.redteam.finish", artifact=str(out_path), status=payload.get("status"))
+    # Rich terminal summary (suppress with --json flag)
+    if not getattr(args, "json_output", False):
+        _print_scan_summary(payload)
     return payload
 
 
@@ -189,6 +260,11 @@ def run_report(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def run_full(args: argparse.Namespace) -> dict[str, Any]:
+    import warnings
+    warnings.warn(
+        "'full' is deprecated and will be removed in v8. Use 'scan' instead.",
+        DeprecationWarning, stacklevel=2,
+    )
     return run_scan(args)
 
 
@@ -580,6 +656,8 @@ def build_parser() -> argparse.ArgumentParser:
     # v6.0: agentic mode
     redteam.add_argument("--agentic", action="store_true",
                          help="Use Sonnet agentic loop instead of deterministic pipeline")
+    redteam.add_argument("--json", dest="json_output", action="store_true",
+                         help="JSON output only (no rich summary)")
 
     osint = sub.add_parser("osint", help="OSINT recon: DNS, GitHub dorks, Shodan, WHOIS")
     osint.add_argument("--roe", required=True)
@@ -633,8 +711,17 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--target", required=True, help="HTTP(S) URL to scan")
     web.add_argument("--headed", action="store_true", help="Show browser (default: headless)")
     web.add_argument("--output-file", default=None, help="JSON report path")
+    web.add_argument("--live", action="store_true", help="Show live Rich TUI dashboard")
+    web.add_argument("--json", dest="json_output", action="store_true", help="JSON output only (no rich summary)")
     web.add_argument("--yes", "-y", action="store_true", default=argparse.SUPPRESS,
                      help="Auto-confirm all interactive prompts (also: SWIFT_AUTO_CONFIRM=1)")
+
+    # ── CTF / init wizard ─────────────────────────────────────────────────────
+    init_p = sub.add_parser("init", help="Initialize ROE config (CTF preset or interactive wizard)")
+    init_p.add_argument("--ctf", choices=["juice-shop", "dvwa", "metasploitable"], default=None,
+                        help="CTF target preset")
+    init_p.add_argument("--bugbounty", metavar="PROGRAM_JSON", default=None,
+                        help="HackerOne program scope JSON")
 
     pe = sub.add_parser("privesc", help="Docker-based privilege escalation tester")
     pe.add_argument("--repo", required=True, help="Workspace path to mount into container")
@@ -794,19 +881,63 @@ def run_web_scan(args: argparse.Namespace) -> dict[str, Any]:
     from browser.playwright_runner import scan_url
     from config.consent import require_consent
 
+    # Pre-flight: target reachability
+    import httpx
+    target_url = getattr(args, "target", None)
+    if target_url:
+        try:
+            httpx.get(target_url, timeout=5.0)
+        except Exception as e:
+            _fail_closed(
+                f"Target unreachable: {target_url}\n"
+                f"  Cause: {e}\n"
+                f"  Hint: Is the target running? Try: docker run -p 3000:3000 bkimminich/juice-shop"
+            )
+
+    # Pre-flight: Playwright availability
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            p.chromium.executable_path  # just probe it
+    except Exception:
+        _fail_closed(
+            "Playwright not installed.\n"
+            "  Fix: pip install 'swiftsec[web]' && playwright install chromium"
+        )
+
     require_consent(args)
+
+    # Support --live flag for TUI mode
+    if getattr(args, "live", False):
+        from events.bus import get_bus
+        from cli.tui import ScanTUI
+        bus = get_bus()
+        tui = ScanTUI(bus)
+        return tui.run(_do_web_scan, args)
+
+    return _do_web_scan(args)
+
+
+def _do_web_scan(args: argparse.Namespace) -> dict[str, Any]:
+    """Inner web scan logic (separated for TUI wrapping)."""
+    from browser.playwright_runner import scan_url
+
     log_step("cli.web_scan.start", target=args.target, headed=args.headed)
     result = scan_url(args.target, headless=not args.headed)
     out = Path(args.output_file) if args.output_file else Path(f"web-scan-{uuid_safe(args.target)}.json")
     out.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
     log_step("cli.web_scan.finish", target=args.target, findings=len(result.findings), artifact=str(out))
-    return {
+    payload = {
         "status": "ok",
         "target": args.target,
         "findings": len(result.findings),
         "artifact": str(out),
         "error": result.error,
     }
+    # Rich terminal summary (suppress with --json flag)
+    if not getattr(args, "json_output", False):
+        _print_scan_summary(payload)
+    return payload
 
 
 def run_privesc(args: argparse.Namespace) -> dict[str, Any]:
@@ -935,6 +1066,76 @@ def _get_editable_source() -> str | None:
     except Exception:  # noqa: BLE001
         pass
     return None
+
+
+def run_init(args: argparse.Namespace) -> dict[str, Any]:
+    """Initialize ROE config — CTF preset or interactive wizard."""
+    import yaml  # type: ignore[import]
+
+    ctf_name = getattr(args, "ctf", None)
+    bugbounty_path = getattr(args, "bugbounty", None)
+
+    if ctf_name:
+        from config.ctf_targets import CTF_TARGETS
+        if ctf_name not in CTF_TARGETS:
+            valid = ", ".join(CTF_TARGETS.keys())
+            _fail_closed(f"Unknown CTF target: {ctf_name}. Valid options: {valid}")
+        target_cfg = CTF_TARGETS[ctf_name]
+        roe = {
+            "version": "1.0",
+            "name": target_cfg["name"],
+            "target": target_cfg["default_url"],
+            "techniques": target_cfg["techniques"],
+            **target_cfg["roe_template"],
+        }
+        out = Path("roe.yaml")
+        out.write_text(yaml.dump(roe, default_flow_style=False), encoding="utf-8")
+        print(f"[SWIFT] ROE config written to {out}")
+        print(f"[SWIFT] Start target with: {target_cfg['docker_hint']}")
+        return {"status": "ok", "roe": str(out), "target": target_cfg["default_url"]}
+
+    if bugbounty_path:
+        from config.hackerone_validator import load_scope, extract_in_scope_domains
+        scope_data = load_scope(bugbounty_path)
+        domains = extract_in_scope_domains(scope_data)
+        roe = {
+            "version": "1.0",
+            "name": f"Bug Bounty: {bugbounty_path}",
+            "scope": domains,
+            "allow_web_probes": True,
+            "allow_chain_execution": False,
+        }
+        out = Path("roe.yaml")
+        out.write_text(yaml.dump(roe, default_flow_style=False), encoding="utf-8")
+        print(f"[SWIFT] ROE config written to {out}")
+        print(f"[SWIFT] In-scope domains: {domains}")
+        return {"status": "ok", "roe": str(out), "scope": domains}
+
+    # Interactive wizard (no --ctf or --bugbounty)
+    try:
+        from rich.prompt import Prompt, Confirm
+        target_url = Prompt.ask("Target URL", default="http://localhost:3000")
+        techniques_str = Prompt.ask("Techniques (comma-sep)", default="xss,sqli,idor")
+        allow_chain = Confirm.ask("Allow chain execution?", default=False)
+    except ImportError:
+        target_url = input("Target URL [http://localhost:3000]: ").strip() or "http://localhost:3000"
+        techniques_str = input("Techniques (comma-sep) [xss,sqli,idor]: ").strip() or "xss,sqli,idor"
+        allow_chain = input("Allow chain execution? [y/N]: ").strip().lower() == "y"
+
+    techniques = [t.strip() for t in techniques_str.split(",") if t.strip()]
+    roe = {
+        "version": "1.0",
+        "name": "Custom Target",
+        "target": target_url,
+        "techniques": techniques,
+        "scope": [target_url],
+        "allow_web_probes": True,
+        "allow_chain_execution": allow_chain,
+    }
+    out = Path("roe.yaml")
+    out.write_text(yaml.dump(roe, default_flow_style=False), encoding="utf-8")
+    print(f"[SWIFT] ROE config written to {out}")
+    return {"status": "ok", "roe": str(out), "target": target_url}
 
 
 def run_update(args: argparse.Namespace) -> dict[str, Any]:
@@ -1076,6 +1277,7 @@ def main() -> None:
             "version": run_version,
             "update": run_update,
             "auto": run_auto,
+            "init": run_init,
         }
         sys.exit(run_repl(parser, handlers))
 
@@ -1095,7 +1297,8 @@ def main() -> None:
     _V6_NO_ZERO_TRUST = {"audit", "plugin", "agent-status"}
     if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan",
                              "wizard", "web-scan", "privesc", "redteam", "osint",
-                             "payload", "niche", "chain", "version", "update", "auto"} | _V6_NO_ZERO_TRUST:
+                             "payload", "niche", "chain", "version", "update", "auto",
+                             "init"} | _V6_NO_ZERO_TRUST:
         _ensure_zero_trust(args)
 
     # v6.0 commands handled inline (no JSON dump)
@@ -1142,6 +1345,7 @@ def main() -> None:
         "update": run_update,
         "auto": run_auto,
         "intel": run_intel,
+        "init": run_init,
     }
     try:
         payload = handlers[args.command](args)

@@ -104,10 +104,11 @@ async def test_agent_dispatches_tool_calls(tmp_path):
 
 
 def test_plateau_detected_same_probe_repeated(tmp_path):
-    """Plateau detected when same probe called >3x."""
+    """Plateau detected when same probe called >5x in a window of 8."""
     roe = _make_roe()
     agent = RedTeamAgent(target="http://t.com", roe=roe, engagement_dir=tmp_path)
-    agent._probe_history = [("sqli", "http://t.com")] * 5
+    # 6 of the same probe in an 8-element window triggers plateau (v > 5)
+    agent._probe_history = [("sqli", "http://t.com")] * 6 + [("xss", "a"), ("ssrf", "b")]
     assert agent._plateau_detected() is True
 
 
@@ -115,7 +116,8 @@ def test_plateau_not_detected_varied_probes(tmp_path):
     roe = _make_roe()
     agent = RedTeamAgent(target="http://t.com", roe=roe, engagement_dir=tmp_path)
     agent._probe_history = [
-        ("sqli", "a"), ("xss", "b"), ("ssrf", "c"), ("idor", "d"), ("oauth", "e")
+        ("sqli", "a"), ("xss", "b"), ("ssrf", "c"), ("idor", "d"),
+        ("oauth", "e"), ("jwt", "f"), ("csrf", "g"), ("lfi", "h"),
     ]
     assert agent._plateau_detected() is False
 
