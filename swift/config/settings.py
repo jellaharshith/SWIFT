@@ -37,6 +37,11 @@ class Config:
     nvd_api_key: str = ""
     cve_poll_interval: int = 2
     kali_container_timeout: int = 300
+    intel_db_path: str = ""
+    intel_sync_interval_hours: int = 24
+    github_token: str = ""
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
 
 
 _config: Optional[Config] = None
@@ -80,6 +85,11 @@ def get_config() -> Config:
         nvd_api_key=os.environ.get("NVD_API_KEY", ""),
         cve_poll_interval=int(os.environ.get("CVE_POLL_INTERVAL", "2")),
         kali_container_timeout=int(os.environ.get("KALI_CONTAINER_TIMEOUT", "300")),
+        intel_db_path=os.environ.get("INTEL_DB_PATH", ""),
+        intel_sync_interval_hours=int(os.environ.get("INTEL_SYNC_INTERVAL_HOURS", "24")),
+        github_token=os.environ.get("GITHUB_TOKEN", ""),
+        openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
+        gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
     )
     return _config
 

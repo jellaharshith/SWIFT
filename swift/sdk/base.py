@@ -44,6 +44,12 @@ class VulnType(str, Enum):
     PRIV_ESC = "priv_esc"
     API_KEY = "api_key"
     SMUGGLING = "smuggling"
+    CLOUD_MISCONFIGURATION = "cloud_misconfiguration"
+    SUPPLY_CHAIN = "supply_chain"
+    CREDENTIAL_BREACH = "credential_breach"
+    KERBEROAST = "kerberoast"
+    MOBILE_HARDCODED_SECRET = "mobile_hardcoded_secret"
+    DEPENDENCY_CONFUSION = "dependency_confusion"
 
 
 @dataclass

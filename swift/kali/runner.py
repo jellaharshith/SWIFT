@@ -79,6 +79,31 @@ MITRE_MAPPINGS: dict[str, dict] = {
         "technique": "Gather Victim Network Info: Domain Properties",
         "tactic": "Reconnaissance",
     },
+    "impacket": {
+        "technique_id": "T1558.003",
+        "technique": "Steal or Forge Kerberos Tickets: Kerberoasting",
+        "tactic": "Credential Access",
+    },
+    "crackmapexec": {
+        "technique_id": "T1021.002",
+        "technique": "Remote Services: SMB/Windows Admin Shares",
+        "tactic": "Lateral Movement",
+    },
+    "metasploit": {
+        "technique_id": "T1190",
+        "technique": "Exploit Public-Facing Application",
+        "tactic": "Initial Access",
+    },
+    "openvas": {
+        "technique_id": "T1595",
+        "technique": "Active Scanning",
+        "tactic": "Reconnaissance",
+    },
+    "semgrep": {
+        "technique_id": "T1588.006",
+        "technique": "Obtain Capabilities: Vulnerabilities",
+        "tactic": "Resource Development",
+    },
     "feroxbuster": {
         "technique_id": "T1595.002",
         "technique": "Active Scanning: Vulnerability Scanning",

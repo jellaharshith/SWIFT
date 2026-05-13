@@ -40,6 +40,13 @@ KNOWN_TECHNIQUES: frozenset[str] = frozenset({
     # v6.0
     "oob_ssrf", "oauth_attack", "websocket_attack", "bizlogic",
     "agentic_loop", "chain_execution",
+<<<<<<< HEAD
+=======
+    # v7.0 — Kali Linux tool phases
+    "kali", "probe", "novel",
+    # v7.0 — new techniques
+    "cloud_recon", "ad_enum", "supply_chain_check", "intel_sync",
+>>>>>>> 2513f4a (feat: v7 intelligence engine + extended probes + kali tools)
 })
 
 

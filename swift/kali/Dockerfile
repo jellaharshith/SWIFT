@@ -30,4 +30,22 @@ RUN ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') \
     && chmod +x /usr/local/bin/nuclei \
     && nuclei -update-templates 2>/dev/null || true
 
+# v7.0 — AD, exploit framework, mobile, and SAST tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    impacket-scripts \
+    crackmapexec \
+    metasploit-framework \
+    neo4j \
+    bloodhound \
+    responder \
+    apktool \
+    python3-impacket \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip3 install --no-cache-dir pymetasploit3 python-gvm
+
+COPY msfrpcd_start.sh /msfrpcd_start.sh
+RUN chmod +x /msfrpcd_start.sh
+
 WORKDIR /work
