@@ -1,4 +1,4 @@
-# SWIFT — AI-Powered Red-Team Automation Platform
+# SWIFTSEC — AI-Powered Red-Team Automation Platform
 
 > Continuous intelligence → active probes → credential-chained attacks → post-exploit assessment. Fully sandboxed. ROE-gated. AI-driven.
 
@@ -7,7 +7,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-![SWIFT TUI finding CRITICAL vulnerability on Juice Shop](docs/demo.gif)
+![SWIFTSEC TUI finding CRITICAL vulnerability on Juice Shop](docs/demo.gif)
 
 > **New here?** Start with the [Quickstart Guide →](docs/QUICKSTART.md)
 
@@ -35,7 +35,7 @@
 
 ## Overview
 
-SWIFT is a professional-grade, AI-powered red-team automation platform built for authorized penetration testing engagements. It orchestrates a full offensive pipeline — from passive OSINT through active exploitation and post-exploit simulation — using Claude Sonnet as the reasoning engine and a continuously updated RAG knowledge base.
+SWIFTSEC is a professional-grade, AI-powered red-team automation platform built for authorized penetration testing engagements. It orchestrates a full offensive pipeline — from passive OSINT through active exploitation and post-exploit simulation — using Claude Sonnet as the reasoning engine and a continuously updated RAG knowledge base.
 
 **Who it is for:** Penetration testers, security engineers, and red teams conducting authorized engagements against owned or explicitly scoped targets.
 
@@ -51,7 +51,7 @@ SWIFT is a professional-grade, AI-powered red-team automation platform built for
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        SWIFT Platform                       │
+│                      SWIFTSEC Platform                      │
 ├──────────────────┬──────────────────┬───────────────────────┤
 │  Intelligence    │   Attack Engine  │    Reporting Layer    │
 │  ─────────────   │   ────────────   │    ───────────────    │
@@ -73,7 +73,7 @@ SWIFT is a professional-grade, AI-powered red-team automation platform built for
 
 ### Intelligence Engine
 
-SWIFT maintains a live knowledge base synced from 10 sources: MITRE ATT&CK, ExploitDB, GitHub Security Advisories, Nuclei templates, PayloadsAllTheThings, SecLists, HackerOne disclosed reports, OWASP WSTG, security blogs (PortSwigger, NCC, Project Zero, Assetnote), and Snyk VulnDB. Every probe invocation is RAG-enriched with fresh payloads before firing.
+SWIFTSEC maintains a live knowledge base synced from 10 sources: MITRE ATT&CK, ExploitDB, GitHub Security Advisories, Nuclei templates, PayloadsAllTheThings, SecLists, HackerOne disclosed reports, OWASP WSTG, security blogs (PortSwigger, NCC, Project Zero, Assetnote), and Snyk VulnDB. Every probe invocation is RAG-enriched with fresh payloads before firing.
 
 | Component | Technology | Function |
 |-----------|-----------|---------|
@@ -243,7 +243,7 @@ swiftsec wizard
 
 ## Rules of Engagement
 
-All offensive commands (`redteam`, `osint`, `chain`) require a signed Rules-of-Engagement YAML. SWIFT validates scope, technique permissions, and time window before any work begins.
+All offensive commands (`redteam`, `osint`, `chain`) require a signed Rules-of-Engagement YAML. SWIFTSEC validates scope, technique permissions, and time window before any work begins.
 
 ```yaml
 # roe.yaml
@@ -267,7 +267,7 @@ simulate_only: true
 allow_chain_execution: false   # set true only for Juice Shop / DVWA targets
 ```
 
-**SWIFT hard fails** (`[DENY]` + exit code 2) when:
+**SWIFTSEC hard fails** (`[DENY]` + exit code 2) when:
 
 - ROE file is absent or invalid
 - Target is not in `authorized_targets`
@@ -393,11 +393,11 @@ Available decorators: `@roe_gated`, `@cached_result`, `@retry`. Test harness: `S
 
 ## CI/CD Integration
 
-SWIFT is pipe-safe: the banner writes to stderr, findings to stdout.
+SWIFTSEC is pipe-safe: the banner writes to stderr, findings to stdout.
 
 ```yaml
 # GitHub Actions example
-- name: SWIFT static code scan
+- name: SWIFTSEC static code scan
   run: swiftsec scan . --output json > swift-report.json
   env:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -413,11 +413,11 @@ swiftsec scan ./repo | jq '.findings[] | select(.severity == "CRITICAL")'
 
 ## Safety & Legal
 
-**SWIFT is authorized-use-only software.**
+**SWIFTSEC is authorized-use-only software.**
 
-> Use of SWIFT against systems you do not own or have explicit written authorization to test is illegal and unethical. The authors accept no liability for unauthorized use.
+> Use of SWIFTSEC against systems you do not own or have explicit written authorization to test is illegal and unethical. The authors accept no liability for unauthorized use.
 
-SWIFT enforces safety at the platform level:
+SWIFTSEC enforces safety at the platform level:
 
 | Control | Implementation |
 |---------|---------------|
@@ -445,7 +445,7 @@ pytest test/ -v --cov
 
 ## Security
 
-For responsible disclosure of vulnerabilities in SWIFT itself, see [`SECURITY.md`](SECURITY.md).
+For responsible disclosure of vulnerabilities in SWIFTSEC itself, see [`SECURITY.md`](SECURITY.md).
 
 ---
 
