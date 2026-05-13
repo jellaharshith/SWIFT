@@ -16,17 +16,57 @@
 ╚══════╝ ╚══╝╚══╝ ╚═╝╚═╝        ╚═╝
 
   AI-Powered Red-Team Automation Pentester
-  v6.0.0 · CISSP/OSCP-grade · mode: red-team
+  v7.0.0 · CISSP/OSCP-grade · Continuous Intelligence + Extended Attack Coverage
 ```
 
-## What SWIFT does
+## What SWIFT does (v7.0)
+
+### Intelligence Engine — Continuous Learning
+
+| Component | Sources | Function |
+|-----------|---------|----------|
+| **Intel Sync** | MITRE ATT&CK, ExploitDB, GitHub Advisories, Nuclei templates, PayloadsAllTheThings, SecLists, HackerOne disclosures, OWASP WSTG, Security blogs RSS, Snyk VulnDB | 10-source RAG knowledge base at `~/.swift/intel/chromadb` |
+| **RAG Retrieval** | ChromaDB + all-MiniLM-L6-v2 embeddings | Inject fresh payloads + techniques into every Sonnet prompt |
+| **Payload Injection** | LLMPayloadMutator + Haiku | Context-aware WAF-bypass variants per tech stack |
+| **Confidence Calibration** | ConfidenceCalibrator + sklearn | OOB confirmed=keep, keyword-only=×0.7, tool+AI agree=×1.1 |
+
+### Extended Attack Coverage
+
+| Probe | Targets | ROE |
+|-------|---------|-----|
+| **Cloud SSRF** | AWS IMDS (IPv4/IPv6), GCP metadata, Azure IMDS | `active_scan` |
+| **Supply Chain** | Dependency confusion, typosquatting (PyPI/NPM) | `osint` |
+| **Credential Breach** | HIBP k-anonymity breach check | `osint` |
+| **Mobile Static** | APK decompile, API key/endpoint grep | `active_scan` |
+| **Active Directory** | LDAP enum, Kerberoasting (Impacket) | `exploit` |
+| **Network Service** | nmap service version → NVD CVE → exploitdb PoC | `active_scan` |
+
+### Kali Tool Suite (v7.0)
+
+| Tool | MITRE | Purpose | ROE |
+|------|-------|---------|-----|
+| **impacket-scripts** | T1550.001 | Kerberoasting, LDAP enum | `exploit` |
+| **metasploit-framework** | T1587.004 | Module exploitation (msfrpc, simulate_only default) | `exploit` |
+| **crackmapexec** | T1021.002 | SMB/WinRM/LDAP/MSSQL enum | `active_scan` |
+| **openvas** | T1046 | GMP XML API, CVSSv3 scoring | `active_scan` |
+| **semgrep-rules** | T1526 | SAST: py/js/java/go/ruby/php | `osint` |
+
+### AI Enhancement Layer (v7.0)
+
+| Component | Model | Function |
+|-----------|-------|----------|
+| **MultiModelClient** | Claude → GPT-4o → Gemini | Fallback on RateLimitError |
+| **Attack Graph Reasoner** | Sonnet (tool-use) | MITRE ATT&CK-mapped exploit chains |
+| **Confidence Calibrator** | sklearn LogisticRegression | Downscale keyword-only, boost OOB/multi-signal |
+
+### v6.0 Features (Still Active)
 
 | Phase | Tools | Result |
 |-------|-------|--------|
-| **OSINT (10 sources)** | DNS, crt.sh cert transparency, CNAME takeover, Wayback CDX, tech fingerprint, email enum, GitHub dorks, Shodan, WHOIS | Full target intel before first packet |
+| **OSINT (10 sources)** | DNS, crt.sh, CNAME takeover, Wayback CDX, tech fingerprint, email enum, GitHub dorks, Shodan, WHOIS | Full target intel before first packet |
 | **Niche Classification** | Claude Sonnet + CISSP persona | Ranks OWASP/CWE attack niches, gates active probe phase |
 | **Triage** | Claude Haiku | Flags suspicious code patterns (~50ms/file) |
-| **Active probes** | Playwright + Claude Sonnet | 20 vuln types confirmed at ≥95% confidence |
+| **Active probes** | Playwright + Claude Sonnet | 26 vuln types (v6+v7) confirmed at ≥95% confidence |
 | **OOB SSRF** | Async callback server + Interactsh | Confirmed out-of-band SSRF via real DNS/HTTP callbacks |
 | **OAuth/OIDC attacks** | httpx | PKCE downgrade, redirect_uri manipulation, token leakage, cred stuffing |
 | **WebSocket attacks** | websockets + Playwright | CSWSH, unauth upgrade, IDOR, injection, namespace abuse |
@@ -38,8 +78,6 @@
 | **DOM IDOR** | Playwright | Numeric/UUID mutation with second-session PII diff |
 | **Custom payloads** | PayloadLibrary | User payloads from `~/.swift/payloads/` take precedence over LLM > builtin |
 | **Credential chains** | SessionManager | JWT/cookie reuse across SQLi → auth → IDOR → privesc |
-| **LLM payloads** | Claude Haiku | Context-aware mutation, WAF-bypassing variants |
-| **Kali automation** | 13 tools + WAF evasion | nmap, nikto, sqlmap, nuclei, ffuf, amass, feroxbuster + more |
 | **Chain execution** | ROE-gated sandbox | Replay attack chains with real session tokens (Juice Shop / DVWA) |
 | **Post-exploit sim** | Docker sandbox | Data-exfil, persistence, C2 feasibility — simulate only |
 | **Immutable audit log** | SHA-256 hash chain | Tamper-evident engagement log, GPG/HMAC manifest signing |
@@ -142,6 +180,59 @@ SWIFT **hard fails** (`[DENY]` + exit 2) when ROE is missing or when:
 - Current time outside `window_start` / `window_end`
 
 `allow_chain_execution: true` enables live chain replay — only effective against Juice Shop / DVWA.
+
+## v7.0 highlights
+
+### RAG-Powered Intelligence Engine
+
+SWIFT learns from the internet continuously — syncs MITRE ATT&CK, ExploitDB, GitHub Advisories, Nuclei templates, PayloadsAllTheThings, SecLists, HackerOne disclosed reports, OWASP WSTG, security blogs (PortSwigger, NCC, Project Zero, Assetnote, Snyk), and Snyk VulnDB into a ChromaDB knowledge base. Every Sonnet prompt is RAG-enriched with fresh payloads and techniques before firing any probe.
+
+```bash
+# Auto-sync all sources nightly (or on-demand)
+swiftsec intel sync [--sources mitre_attack,exploitdb,nuclei_templates] [--force]
+
+# Search the knowledge base
+swiftsec intel search "SQL injection WAF bypass" --n 10
+
+# Check sync status
+swiftsec intel status
+
+# Version tracking + rollback
+swiftsec intel version --list | --rollback {id}
+```
+
+### Extended Attack Coverage — 6 New Probes
+
+1. **Cloud SSRF** — AWS/GCP/Azure IMDS metadata extraction (active_scan ROE)
+2. **Supply Chain** — Dependency confusion + typosquatting via PyPI/NPM (osint ROE)
+3. **Credential Breach** — HIBP k-anonymity check for discovered emails (osint ROE)
+4. **Mobile Static** — APK decompile + secret grep (active_scan ROE)
+5. **Active Directory** — LDAP enum + Kerberoasting via Impacket (exploit ROE)
+6. **Network Service** — nmap service version → NVD CVE lookup → exploitdb PoC (active_scan ROE)
+
+### Kali Tool Runners
+
+Docker-isolated runners for Kali automation:
+- **impacket-scripts** — Kerberoasting, LDAP enumeration
+- **metasploit-framework** — msfrpc API with simulate_only default
+- **crackmapexec** — SMB/WinRM/LDAP/MSSQL enum
+- **openvas** — GMP XML API with CVSSv3 parsing
+- **semgrep-rules** — SAST across py/js/java/go/ruby/php
+
+All respect WAF-evasion flags, ROE gates, and `--network=none` sandbox.
+
+### AI Enhancement Layer
+
+- **MultiModelClient** — Claude → GPT-4o → Gemini fallback on rate limits
+- **LLMPayloadMutator** — Haiku bulk mutation + Sonnet WAF-bypass variants per tech stack
+- **AttackGraphReasoner** — Sonnet maps MITRE ATT&CK exploit chains from findings + RAG context
+- **ConfidenceCalibrator** — Smart downscaling (keyword-only=×0.7), boosting (tool+AI=×1.1)
+
+### New VulnTypes (26 Total)
+
+Added to v6's 20: `CLOUD_MISCONFIGURATION`, `SUPPLY_CHAIN`, `CREDENTIAL_BREACH`, `KERBEROAST`, `MOBILE_HARDCODED_SECRET`, `DEPENDENCY_CONFUSION`
+
+---
 
 ## v6.0 highlights
 
@@ -307,9 +398,11 @@ All LLM prompts now use offensive attacker framing:
 | `privesc` | — | Docker privesc (--allow-privesc) |
 | `wizard` | — | Interactive menu |
 
-## Active probe types
+## Active probe types (26 total)
 
-XSS · SQLi · SSRF · OOB SSRF · SSTI · IDOR · JWT alg:none · XXE · CRLF · NoSQL · Prototype Pollution · Auth Bypass · HTTP Smuggling · GraphQL · Race Condition · API Key Discovery · DOM IDOR · OAuth/OIDC · WebSocket · Business Logic
+**v6 base (20):** XSS · SQLi · SSRF · OOB SSRF · SSTI · IDOR · JWT alg:none · XXE · CRLF · NoSQL · Prototype Pollution · Auth Bypass · HTTP Smuggling · GraphQL · Race Condition · API Key Discovery · DOM IDOR · OAuth/OIDC · WebSocket · Business Logic
+
+**v7 extended (6):** Cloud SSRF Metadata · Supply Chain (Dep Confusion) · Credential Breach (HIBP) · Kerberoasting · Mobile Hardcoded Secrets · Network Service CVE
 
 ## Credential chaining
 
@@ -365,18 +458,41 @@ c2_feasibility     → command_and_control
 cp swift/.env.example .env
 ```
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | ✅ | Claude API key |
-| `GITHUB_TOKEN` | Optional | GitHub dork search |
-| `SHODAN_API_KEY` | Optional | Shodan intel |
-| `NVD_API_KEY` | Optional | NVD CVE feed (higher rate limit) |
-| `HUNTER_API_KEY` | Optional | hunter.io email enumeration |
-| `SWIFT_ROE` | Optional | Default ROE file path |
-| `INTERACTSH_URL` | Optional | Route OOB callbacks through Interactsh (v6.0) |
-| `SWIFT_GPG_KEY_ID` | Optional | GPG key ID for engagement manifest signing (v6.0) |
-| `SWIFT_AGENT_BUDGET_PROBES` | Optional | Max probe calls per agentic engagement (v6.0) |
-| `SWIFT_AGENT_BUDGET_SONNET_CALLS` | Optional | Max Sonnet calls per agentic engagement (v6.0) |
+### Core (Required)
+
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | ✅ Claude API key |
+
+### OSINT & Recon
+
+| Variable | Description |
+|----------|-------------|
+| `GITHUB_TOKEN` | GitHub dork search + GHSA sync (v7.0) |
+| `SHODAN_API_KEY` | Shodan intel |
+| `NVD_API_KEY` | NVD CVE feed (higher rate limit) |
+| `HUNTER_API_KEY` | hunter.io email enumeration |
+
+### v7.0 Intelligence Engine
+
+| Variable | Description |
+|----------|-------------|
+| `INTEL_DB_PATH` | ChromaDB path (default: `~/.swift/intel/chromadb`) |
+| `INTEL_SYNC_INTERVAL_HOURS` | Auto-sync interval (default: 24) |
+| `SWIFT_INTEL_AUTO_SYNC` | Set to `1` for background sync on every scan |
+| `OPENAI_API_KEY` | GPT-4o fallback model |
+| `GEMINI_API_KEY` | Gemini fallback model |
+| `HIBP_API_KEY` | Have I Been Pwned v3 API (credential breach probe) |
+
+### Offensive & Chains
+
+| Variable | Description |
+|----------|-------------|
+| `SWIFT_ROE` | Default ROE file path |
+| `INTERACTSH_URL` | Route OOB callbacks through Interactsh (v6.0) |
+| `SWIFT_GPG_KEY_ID` | GPG key ID for engagement manifest signing (v6.0) |
+| `SWIFT_AGENT_BUDGET_PROBES` | Max probe calls per agentic engagement (v6.0) |
+| `SWIFT_AGENT_BUDGET_SONNET_CALLS` | Max Sonnet calls per agentic engagement (v6.0) |
 
 ## Safety guarantees
 
