@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swiftsec"
-version = "2.0.0"
+version = "7.0.0"
 description = "SWIFT — AI-powered continuous vulnerability scanner and patch generator."
 readme = { text = "SWIFT (swiftsec) — red-team automation, OSINT, Kali tooling, and Playwright probes. Full docs: https://github.com/jellaharshith/SWIFT", content-type = "text/markdown" }
 requires-python = ">=3.10"

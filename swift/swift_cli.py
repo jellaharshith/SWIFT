@@ -921,8 +921,24 @@ def run_version(args: argparse.Namespace) -> dict[str, Any]:
     return {"version": __version__}
 
 
+def _get_editable_source() -> str | None:
+    """Return the local source path if swiftsec is an editable install, else None."""
+    try:
+        import importlib.metadata as meta
+        dist = meta.distribution("swiftsec")
+        direct_url = dist.read_text("direct_url.json")
+        if direct_url:
+            import json as _json
+            data = _json.loads(direct_url)
+            if data.get("dir_info", {}).get("editable") and data.get("url", "").startswith("file://"):
+                return data["url"][len("file://"):]
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def run_update(args: argparse.Namespace) -> dict[str, Any]:
-    """Upgrade swiftsec via pipx or pip, depending on how it was installed."""
+    """Upgrade swiftsec via local source reinstall, pipx, or pip."""
     import shutil
     import subprocess
 
@@ -933,10 +949,24 @@ def run_update(args: argparse.Namespace) -> dict[str, Any]:
         v_args = types.SimpleNamespace(check=True)
         return run_version(v_args)
 
-    # Detect pipx install: executable lives inside a pipx venv
+    source_path = _get_editable_source()
     in_pipx = ".local/pipx/venvs" in sys.executable or "pipx" in sys.executable
 
-    if in_pipx and shutil.which("pipx"):
+    if source_path and in_pipx and shutil.which("pipx"):
+        # Editable source install via pipx — reinstall from local source
+        print(f"Reinstalling swiftsec from local source: {source_path}")
+        result = subprocess.run(
+            ["pipx", "install", source_path, "--force"],
+            capture_output=False,
+        )
+    elif source_path:
+        # Editable source install via pip
+        print(f"Reinstalling swiftsec from local source: {source_path}")
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--force-reinstall", source_path],
+            capture_output=False,
+        )
+    elif in_pipx and shutil.which("pipx"):
         print("Upgrading swiftsec via pipx...")
         result = subprocess.run(["pipx", "upgrade", "swiftsec"], capture_output=False)
     else:
