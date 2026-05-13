@@ -1,3 +1,21 @@
+# SWIFT v7.0 Release — SHIPPED ✅ (2026-05-12)
+
+## Session Summary
+- [x] Feature: v7 intelligence engine (10-source RAG, ChromaDB, RAG injection)
+- [x] Feature: Extended probes (cloud SSRF, supply chain, credential breach, mobile, AD, network service)
+- [x] Feature: Kali runners (impacket, metasploit, crackmapexec, openvas, semgrep)
+- [x] Feature: AI enhancement layer (multi-model fallback, payload mutator, attack graph, confidence calibrator)
+- [x] Docs: README.md updated to v7.0
+- [x] CI/CD: Intel sync workflow + test matrix updated
+
+**Commits to main:**
+- f3f44a8: feat: v7 intelligence engine + extended probes + kali tools
+- 37c09be: docs: update README to v7.0
+- 499431c: ci: add nightly intel sync workflow
+- f492056: ci: include intel + kali extras in test matrix
+
+---
+
 # SWIFT v5.0 — Full Red-Team Hacker Upgrade
 
 ## Status: SHIPPED ✓ (488/490 tests pass, 2 pre-existing failures unrelated to v5)
