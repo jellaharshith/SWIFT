@@ -131,6 +131,24 @@ engagement workflow, web3 grep patterns, and CLI smoke for all 11 new
 subcommands. Integration tests for Neo4j and LiteLLM are gated by env
 vars (`NEO4J_URI`, `LITELLM_BASE_URL`).
 
+## Operator doctrine
+
+See `/SWIFT/CLAUDE.md` for the three operator archetypes (Mitnick / Haddix / Rosén).
+
+Doctrine source files: `swift/doctrine/` (mitnick.md, haddix.md, rosen.md, ptes.md, persona_map.yaml).
+
+Loader: `from doctrine import compose_persona, load_doctrine`
+
+### PTES graph
+
+`swift/agent/langgraph_layer/graphs/ptes.py` — 7-node DAG.
+
+Entry-point: `swiftsec ptes <target> --mode={pentest,bounty} --depth={fast,standard,deep} --stop-after=<phase>`.
+
+Topology: `pre_engage` → `intel` → `threat_model` → `vuln` → `exploit_phase` → `post_exploit` → `report_phase`.
+
+Bug-bounty routing: `swiftsec hunt --ptes` routes through the same DAG via `bounty/ptes_router.py` with bounty ROE profile.
+
 ## Licenses & attribution
 
 The merged work is MIT (see `LICENSE`). Two upstream sources are folded in:

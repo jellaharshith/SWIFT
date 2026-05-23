@@ -20,6 +20,14 @@ from dataclasses import dataclass
 
 from llm.fallback import Tier
 
+try:
+    from doctrine import compose_persona as _compose_persona
+    _DOCTRINE_AVAILABLE = True
+except ImportError:
+    _DOCTRINE_AVAILABLE = False
+    def _compose_persona(name: str) -> str:  # type: ignore[misc]
+        return ""
+
 
 @dataclass(frozen=True)
 class Specialist:
@@ -49,7 +57,15 @@ _VULNRESEARCH_PROMPT = (
 _RECON_PROMPT = (
     "You are Recon. Map the authorized attack surface using passive OSINT "
     "and authorized active scans. Output a structured target inventory "
-    "(hosts, services, technologies, auth surfaces) into shared state."
+    "(hosts, services, technologies, auth surfaces) into shared state. "
+    "Specifically probe for: MCP and OAuth surfaces (/.well-known/openid-configuration, "
+    "/.well-known/oauth-authorization-server, /.well-known/mcp, /oauth/register, "
+    "/mcp/oauth2/register), AI agent API surfaces (/api/agent, /api/ai, /api/chat, "
+    "/api/llm), GraphQL endpoints including APQ support (/graphql, check for "
+    "persistedQuery extension in schema introspection), file upload and serve "
+    "surfaces (/upload, /files, /attachments, /assets from same origin), "
+    "state-mutation endpoints vulnerable to race conditions (/checkout, /transfer, "
+    "/pay, /coupon, /credits/redeem)."
 )
 
 _EXPLOIT_PROMPT = (
@@ -115,6 +131,84 @@ _SOUNDWAVE_PROMPT = (
 )
 
 
+_HUNT_PLANNER_PROMPT = (
+    "You are Hunt Planner. Given a list of H1 bug bounty programs (name, bounty range, "
+    "scope assets, resolved-report count last 30 days), score each 0-10 on: "
+    "attack surface richness (API/OAuth/GraphQL/MCP = high score), competition signal "
+    "(≤3 resolved reports last 30d = low competition = high score), bounty ceiling "
+    "(≥$3k = high score), recently added scope assets (new = unexplored = high score), "
+    "match to proven kill chain (GraphQL BOLA, OAuth DCR bypass, CORS with credentials, "
+    "file upload IDOR). Return top-3 programs with scores and rationale. No live probing."
+)
+
+_OAUTH_DCR_HUNTER_PROMPT = (
+    "You are OAuth DCR Hunter. Map the target's complete OAuth 2.x / OIDC / MCP auth surface: "
+    "discover /.well-known/openid-configuration, /.well-known/oauth-authorization-server, "
+    "/.well-known/mcp endpoints. Identify Dynamic Client Registration (RFC 7591) at "
+    "/oauth/register, /mcp/oauth2/register, or similar. "
+    "Test prohibited redirect_uri schemes: javascript:, data:, file:, vscode://, slack://, "
+    "steam://, and plaintext http:// non-localhost. A 201 response with any of these is a "
+    "spec-MUST violation (RFC 9700 §4.1.3, MCP spec). "
+    "Also test: PKCE non-enforcement (omit code_challenge), plain method accepted (MUST reject "
+    "in OAuth 2.1), token_endpoint_auth_method=none with client_secret supplied, client_id "
+    "enumeration via /authorize error messages. ROE technique: oauth_attack."
+)
+
+_UPLOAD_HUNTER_PROMPT = (
+    "You are Upload Hunter. Find all file upload surfaces (multipart/form-data, PUT binary, "
+    "base64 JSON body). For each endpoint test: "
+    "(1) IDOR — upload as User A, retrieve file_id, access /files/<id> as User B; "
+    "(2) Content-type mismatch — PNG magic bytes + .php extension, JPEG magic + .php, "
+    "GIF89a prefix + <script> body; "
+    "(3) Filename path traversal — ../../evil.php, ....//....//evil.php; "
+    "(4) SVG with external entity for SSRF — <svg><image href='http://169.254.169.254/'/></svg>; "
+    "(5) Upload to another user's resource via resource_id parameter manipulation. "
+    "ROE technique: active_scan."
+)
+
+_THREAT_MODELER_PROMPT = (
+    "You are Threat Modeler. Given a target inventory from Intel phase, "
+    "query the Attack Knowledge Graph (kg_query) and intel feeds to rank "
+    "attack paths by feasibility × impact. Output: top-5 attack paths with "
+    "entry vector, chain steps, estimated complexity, and assumed attacker profile. "
+    "Mitnick lens: include any trust-assumption gaps (what the docs claim vs what code enforces). "
+    "Haddix lens: surface any low-competition vectors that require deep recon to find. "
+    "ROE technique: ptes_threat_model."
+)
+
+_REPORT_FORMATTER_PROMPT = (
+    "You are Report Formatter. Transform accumulated findings and per-phase artifacts "
+    "into a Frans Rosén-style narrative report. Structure: "
+    "(1) Discovery — how the entry point was found, show your reasoning; "
+    "(2) Hypothesis — what you believed was possible before proof; "
+    "(3) Escalation — the chain of reasoning from interesting to exploitable; "
+    "(4) Impact — business impact first, technical impact second, quantified; "
+    "(5) Reproduction — 3-5 steps a triage engineer can follow in 10 minutes; "
+    "(6) Fix — concrete minimal change, not generic advice. "
+    "Rosén test: first paragraph must be understandable by a non-technical PM. "
+    "ROE technique: ptes_report."
+)
+
+_PTES_ORCHESTRATOR_PROMPT = (
+    "You are PTES Orchestrator. Coordinate the 7-phase PTES engagement: "
+    "pre_engage → intel → threat_model → vuln → exploit_phase → post_exploit → report_phase. "
+    "Each phase must complete its exit criteria before the next begins. "
+    "Apply Mitnick mindset (human trust gaps), Haddix methodology (surface expansion), "
+    "Rosén reporting (narrative-first). Gate every phase transition against ROE. "
+    "Never skip phases. Emit a phase artifact (markdown) at each phase exit."
+)
+
+
+def get_specialist_with_doctrine(name: str) -> "Specialist":
+    """Return a Specialist with doctrine-injected system prompt."""
+    spec = SPECIALISTS[name]
+    preamble = _compose_persona(name)
+    if not preamble:
+        return spec
+    from dataclasses import replace
+    return replace(spec, system_prompt=preamble + "\n\n---\n\n" + spec.system_prompt)
+
+
 SPECIALISTS: dict[str, Specialist] = {
     "decepticon":      Specialist("decepticon",      "orchestrator", _ORCHESTRATOR_PROMPT, ("delegate",), Tier.HIGH),
     "vulnresearch":    Specialist("vulnresearch",    "orchestrator", _VULNRESEARCH_PROMPT, ("delegate",), Tier.HIGH),
@@ -132,4 +226,12 @@ SPECIALISTS: dict[str, Specialist] = {
     "reverser":        Specialist("reverser",        "domain",       _REVERSER_PROMPT,     ("static_analyze",), Tier.MID),
     "analyst":         Specialist("analyst",         "domain",       _ANALYST_PROMPT,      ("summarize", "kg_query"), Tier.HIGH),
     "soundwave":       Specialist("soundwave",       "planning",     _SOUNDWAVE_PROMPT,    ("ask_user", "write_doc"), Tier.HIGH),
+    # 2025-2026 additions
+    "hunt_planner":    Specialist("hunt_planner",    "planning",     _HUNT_PLANNER_PROMPT,     ("classify", "summarize"), Tier.HIGH),
+    "oauth_dcr_hunter": Specialist("oauth_dcr_hunter", "exploit",   _OAUTH_DCR_HUNTER_PROMPT,  ("probe_run", "kg_add_vuln"), Tier.HIGH),
+    "upload_hunter":   Specialist("upload_hunter",   "exploit",      _UPLOAD_HUNTER_PROMPT,    ("probe_run", "kg_add_vuln"), Tier.HIGH),
+    # v9 PTES specialists
+    "threat_modeler":    Specialist("threat_modeler",    "recon",       _THREAT_MODELER_PROMPT,      ("kg_query", "classify", "summarize"), Tier.HIGH),
+    "report_formatter":  Specialist("report_formatter",  "domain",      _REPORT_FORMATTER_PROMPT,     ("summarize", "write_doc"), Tier.HIGH),
+    "ptes_orchestrator": Specialist("ptes_orchestrator", "orchestrator", _PTES_ORCHESTRATOR_PROMPT,  ("delegate",), Tier.HIGH),
 }

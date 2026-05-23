@@ -109,6 +109,21 @@ MITRE_MAPPINGS: dict[str, dict] = {
         "technique": "Active Scanning: Vulnerability Scanning",
         "tactic": "Reconnaissance",
     },
+    "dalfox": {
+        "technique_id": "T1059.007",
+        "technique": "Command and Scripting Interpreter: JavaScript",
+        "tactic": "Execution",
+    },
+    "zap": {
+        "technique_id": "T1190",
+        "technique": "Exploit Public-Facing Application",
+        "tactic": "Initial Access",
+    },
+    "bloodhound-python": {
+        "technique_id": "T1087.002",
+        "technique": "Account Discovery: Domain Account",
+        "tactic": "Discovery",
+    },
 }
 
 ALL_TOOLS = [

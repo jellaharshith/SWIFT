@@ -32,6 +32,13 @@ New in v8.0 (Decepticon + claude-bug-bounty merge):
   - hunt_memory_read    : Read cross-engagement hunt memory (audit.jsonl / patterns.jsonl).
   - hunt_memory_write   : Write/append to cross-engagement hunt memory.
   - langgraph_subagent  : Invoke a LangGraph specialist sub-graph (Decepticon-ported agents).
+
+New in v9 (PTES 7-phase pipeline):
+  - ptes_pre_engage  : Pre-engagement planning (PTES phase 1).
+  - ptes_intel       : Intelligence gathering (PTES phase 2).
+  - ptes_threat_model: Threat modeling and attack path ranking (PTES phase 3).
+  - ptes_report      : Report generation (PTES phase 7, read-only).
+  - kg_query         : Read-only knowledge graph queries.
 """
 from __future__ import annotations
 
@@ -65,6 +72,9 @@ KNOWN_TECHNIQUES: frozenset[str] = frozenset({
     "web3_audit", "auth_chain",
     "hunt_memory_read", "hunt_memory_write",
     "langgraph_subagent",
+    # v9 PTES
+    "ptes_pre_engage", "ptes_intel", "ptes_threat_model", "ptes_report",
+    "kg_query",
 })
 
 
@@ -213,6 +223,16 @@ def assert_window_active(roe: ROE) -> None:
         _deny(f"Engagement window has not started yet. Start: {roe.window_start.isoformat()}")
     if now > roe.window_end:
         _deny(f"Engagement window has expired. End: {roe.window_end.isoformat()}")
+
+
+def assert_techniques(roe: ROE, techniques: list[str]) -> None:
+    """Assert that every technique in *techniques* is allowed by this ROE.
+
+    Convenience wrapper over :func:`assert_technique_allowed` for callers
+    that need to gate multiple techniques at once (e.g. PTES pipeline).
+    """
+    for technique in techniques:
+        assert_technique_allowed(roe, technique)
 
 
 def validate_all(roe: ROE, target: str, technique: str) -> None:
