@@ -6,8 +6,8 @@ from agent.langgraph_layer.specialists import SPECIALISTS
 
 
 def test_specialist_count():
-    # 16 specialists ported from Decepticon
-    assert len(SPECIALISTS) == 16
+    # 16 original Decepticon specialists + 3 hunt specialists + 3 PTES specialists = 22
+    assert len(SPECIALISTS) == 22
 
 
 def test_graph_names_stable():

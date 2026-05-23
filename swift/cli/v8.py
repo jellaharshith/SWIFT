@@ -63,6 +63,8 @@ def register(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--bearer", default=None, help="auth bearer token for downstream scanners")
     p.add_argument("--cookie", default=None, help="raw Cookie header for downstream scanners")
     p.add_argument("--out-dir", default=".swift-artifacts/hunt")
+    p.add_argument("--ptes", action="store_true", help="route hunt through PTES 7-phase DAG")
+    p.add_argument("--platform", choices=["h1", "bugcrowd", "intigriti", "immunefi"], default="h1")
 
     # validate ------------------------------------------------------------
     p = sub.add_parser("validate", help="Run 7-question + 4-gate validation on a finding JSON")
@@ -105,6 +107,19 @@ def register(sub: argparse._SubParsersAction) -> None:
     sk_i.add_argument("--force", action="store_true", help="overwrite existing non-symlink files of the same name")
     sk.add_parser("uninstall", help="Remove SWIFT-installed symlinks")
     sk.add_parser("list",      help="Show currently installed skills + commands")
+
+    # ptes ----------------------------------------------------------------
+    p = sub.add_parser("ptes", help="PTES 7-phase engagement (Mitnick mind / Haddix hunt / Rosén report)")
+    p.add_argument("target", help="target URL, hostname, or CIDR")
+    p.add_argument("--roe", required=True, help="path to roe.yaml")
+    p.add_argument("--mode", choices=["pentest", "bounty"], default="pentest")
+    p.add_argument("--depth", choices=["fast", "standard", "deep"], default="standard")
+    p.add_argument("--stop-after", metavar="PHASE",
+                   choices=["pre_engage", "intel", "threat_model", "vuln",
+                            "exploit_phase", "post_exploit", "report_phase"],
+                   default=None, help="halt after this phase (for dry runs)")
+    p.add_argument("--out-dir", default=".swift-artifacts/ptes")
+    p.add_argument("--engagement-id", default=None, help="optional engagement identifier")
 
     # kg ------------------------------------------------------------------
     p = sub.add_parser("kg", help="Attack knowledge graph: query / export / prune")
@@ -179,6 +194,27 @@ def run_vuln_pipeline(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def run_hunt(args: argparse.Namespace) -> dict[str, Any]:
+    if getattr(args, "ptes", False):
+        from bounty.ptes_router import run_bounty_ptes
+        from security.roe import load_roe, assert_window_active
+        roe = load_roe(args.roe)
+        assert_window_active(roe)
+        state: dict[str, Any] = {
+            "roe": roe,
+            "engagement": _engagement_dict(roe),
+            "target": args.target,
+            "program": args.program,
+        }
+        result = run_bounty_ptes(
+            state,
+            program=args.program,
+            platform=getattr(args, "platform", "h1"),
+            depth="standard",
+            out_dir=args.out_dir,
+        )
+        print(f"[HUNT-PTES] Complete. {len(result.get('findings', []))} findings.")
+        return {"status": "ok", "findings_count": len(result.get("findings", []))}
+
     from agent.langgraph_layer import run_subgraph
     from bounty.auth_session import AuthSession, set_session
     from bounty.hunt_memory import HuntMemory
@@ -457,6 +493,46 @@ def _skills_list() -> dict[str, Any]:
     return {"status": "ok", "installed": out}
 
 
+def _handle_ptes(args: argparse.Namespace) -> int:
+    from security.roe import load_roe, assert_techniques
+    from agent.langgraph_layer.graphs.ptes import run_ptes
+    import json
+
+    roe = load_roe(args.roe)
+    required = ["osint", "active_scan", "exploit", "post_exploit",
+                "engagement_planning", "vuln_pipeline", "ptes_pre_engage",
+                "ptes_intel", "ptes_threat_model", "ptes_report"]
+    if args.mode == "bounty":
+        required = [t for t in required if t not in ("exploit",)]
+    assert_techniques(roe, required)
+
+    state: dict = {
+        "roe": roe,
+        "engagement": {
+            "target": args.target,
+            "mode": args.mode,
+            "depth": args.depth,
+            "engagement_id": args.engagement_id or f"ptes-{args.target}",
+        },
+    }
+
+    print(f"[PTES] Starting {args.mode} engagement on {args.target} (depth={args.depth})")
+    if args.stop_after:
+        print(f"[PTES] Will stop after phase: {args.stop_after}")
+
+    result = run_ptes(
+        state,
+        mode=args.mode,
+        depth=args.depth,
+        stop_after=args.stop_after,
+        out_dir=args.out_dir,
+    )
+
+    findings = result.get("findings", [])
+    print(f"\n[PTES] Complete. {len(findings)} findings. Artifacts: {args.out_dir}")
+    return 0
+
+
 # ----------------------------------------------------------------- dispatch map
 
 HANDLERS: dict[str, Callable[[argparse.Namespace], dict[str, Any]]] = {
@@ -471,6 +547,7 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], dict[str, Any]]] = {
     "lab":            run_lab,
     "skills":         run_skills,
     "kg":             run_kg,
+    "ptes":           _handle_ptes,
 }
 
 # Commands that should bypass zero-trust + may emit non-JSON.

@@ -37,3 +37,13 @@ docs/superpowers/
 .playwright-mcp/
 swift/auto-output/
 swift/web-scan-*.json
+
+# Sub-directory AI assistant context files (auto-generated, not source of truth)
+**/claude.md
+CLAUDE.md
+
+# Audit log (runtime-generated, large, not source history)
+swift/log/audit_mcp_tools.json
+
+# Build artifacts
+swift/build/
