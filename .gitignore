@@ -31,3 +31,9 @@ docs/superpowers/
 /README_PHASE_3.md
 /TODO.md
 **/TODO.md
+
+# Bug-bounty engagement artifacts (keep in Downloads/SWIFT, not here)
+*.png
+.playwright-mcp/
+swift/auto-output/
+swift/web-scan-*.json

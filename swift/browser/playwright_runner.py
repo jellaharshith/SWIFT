@@ -1,17 +1,23 @@
 """Playwright async driver: navigate + probe URL for live web vulns.
 
 Logs every step via log.audit.log_step.
+
+v7.1: every network-traffic-generating call (page.goto, fetch-via-page.evaluate)
+is routed through _gated_goto/_gated_evaluate which honor a module-level
+AsyncRateGate populated by _run() from the ROE. Fixes prior bug where probes
+fired at ~10 rps regardless of ROE rate_limit_rps.
 """
 from __future__ import annotations
 
 import asyncio
 import time
 from dataclasses import dataclass, field, asdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl
 
 if TYPE_CHECKING:
     from browser.smuggling_probe import SmugglingResult
+    from browser.rate_gate import AsyncRateGate
 
 from browser.probes import (
     XSS_PAYLOADS,
@@ -92,6 +98,26 @@ def _inject_param(url: str, key: str, value: str) -> str:
     return urlunparse(parsed._replace(query=urlencode(qs)))
 
 
+# ── v7.1 rate-limit gate ─────────────────────────────────────────────────────
+# Module-level so probe helpers don't need a passed-in arg. Set by _run() from
+# the ROE's rate_limit_rps. If None, no throttle is applied (legacy callers).
+_RATE_GATE: "Optional[AsyncRateGate]" = None
+
+
+async def _gated_goto(page, url: str, **kw):
+    """Rate-limited wrapper around page.goto — acquires a token first."""
+    if _RATE_GATE is not None:
+        await _RATE_GATE.acquire()
+    return await page.goto(url, **kw)
+
+
+async def _gated_evaluate(page, js: str):
+    """Rate-limited wrapper around page.evaluate — for probes that POST via fetch."""
+    if _RATE_GATE is not None:
+        await _RATE_GATE.acquire()
+    return await page.evaluate(js)
+
+
 # ── Per-kind probe helpers ────────────────────────────────────────────────────
 
 async def _probe_xss(page, url: str, result: BrowserScanResult, deadline: float = 0.0) -> None:
@@ -108,7 +134,7 @@ async def _probe_xss(page, url: str, result: BrowserScanResult, deadline: float 
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.xss", target=test_url, payload=payload)
             try:
-                await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 triggered = await page.evaluate("() => window.__swift_xss === 1")
                 body = (await page.content()).lower()
                 if triggered or payload.lower() in body:
@@ -135,7 +161,7 @@ async def _probe_sqli(page, url: str, result: BrowserScanResult) -> None:
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.sqli", target=test_url, payload=payload)
             try:
-                await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 body = (await page.content()).lower()
                 for sig in SQLI_ERROR_SIGNATURES:
                     if sig in body:
@@ -162,7 +188,7 @@ async def _probe_open_redirect(page, url: str, result: BrowserScanResult) -> Non
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.open_redirect", target=test_url, payload=payload)
             try:
-                await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 final = page.url
                 if "evil.example.com" in final:
                     result.findings.append(BrowserFinding(
@@ -189,7 +215,7 @@ async def _probe_ssrf(page, url: str, result: BrowserScanResult) -> None:
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.ssrf", target=test_url, payload=payload)
             try:
-                await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 body = (await page.content()).lower()
                 hit_imds = any(sig in body for sig in _imds_signatures)
                 hit_local = "127.0.0.1" in body or "localhost" in body
@@ -216,7 +242,7 @@ async def _probe_ssti(page, url: str, result: BrowserScanResult) -> None:
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.ssti", target=test_url, payload=payload)
             try:
-                await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 body = await page.content()
                 for sig in SSTI_SIGNATURES:
                     if sig in body:
@@ -251,7 +277,7 @@ async def _probe_nosql(page, url: str, result: BrowserScanResult) -> None:
         baseline_url = url
         baseline_status: int | None = None
         try:
-            resp = await page.goto(baseline_url, timeout=15000, wait_until="domcontentloaded")
+            resp = await _gated_goto(page, baseline_url, timeout=15000, wait_until="domcontentloaded")
             baseline_status = resp.status if resp else None
         except Exception:  # noqa: BLE001
             pass
@@ -260,7 +286,7 @@ async def _probe_nosql(page, url: str, result: BrowserScanResult) -> None:
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.nosql", target=test_url, payload=payload)
             try:
-                resp = await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                resp = await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 body = (await page.content()).lower()
                 injected_status = resp.status if resp else None
                 error_hit = any(sig in body for sig in _nosql_errors)
@@ -302,10 +328,10 @@ async def _probe_auth_bypass(page, url: str, result: BrowserScanResult) -> None:
     for header, value in AUTH_BYPASS_HEADERS.items():
         log_step("browser.probe.auth_bypass.header", url=url, header=header, value=value)
         try:
-            resp = await page.goto(url, timeout=15000, wait_until="domcontentloaded",
-                                   # Playwright doesn't support custom request headers on goto;
-                                   # we route the request to inject headers instead.
-                                   )
+            resp = await _gated_goto(page, url, timeout=15000, wait_until="domcontentloaded",
+                                     # Playwright doesn't support custom request headers on goto;
+                                     # we route the request to inject headers instead.
+                                     )
             # We do a best-effort check — header injection via goto is limited in Playwright.
             # Real header injection would require page.route(); this is a placeholder probe.
             body = (await page.content()).lower()
@@ -326,7 +352,7 @@ async def _probe_auth_bypass(page, url: str, result: BrowserScanResult) -> None:
         test_url = base_origin + bypass_path
         log_step("browser.probe.auth_bypass.path", url=test_url)
         try:
-            resp = await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+            resp = await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
             body = (await page.content()).lower()
             if resp and resp.status == 200 and any(kw in body for kw in _sensitive):
                 result.findings.append(BrowserFinding(
@@ -349,7 +375,7 @@ async def _probe_prototype_pollution(page, url: str, result: BrowserScanResult) 
     for key in test_keys:
         # Capture baseline body length as a simple change signal
         try:
-            base_resp = await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+            base_resp = await _gated_goto(page, url, timeout=15000, wait_until="domcontentloaded")
             base_body = await page.content()
             base_len = len(base_body)
             base_status = base_resp.status if base_resp else None
@@ -361,7 +387,7 @@ async def _probe_prototype_pollution(page, url: str, result: BrowserScanResult) 
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.prototype_pollution", target=test_url, payload=payload)
             try:
-                resp = await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                resp = await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 body = await page.content()
                 injected_len = len(body)
                 injected_status = resp.status if resp else None
@@ -396,7 +422,7 @@ async def _probe_crlf(page, url: str, result: BrowserScanResult) -> None:
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.crlf", target=test_url, payload=payload)
             try:
-                resp = await page.goto(test_url, timeout=15000, wait_until="domcontentloaded")
+                resp = await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 if resp:
                     headers = resp.headers  # dict-like
                     set_cookie = headers.get("set-cookie", "")
@@ -434,7 +460,7 @@ async def _probe_jwt(page, url: str, result: BrowserScanResult, deadline: float 
     alg_none_token = JWT_ATTACKS["alg_none"]
     try:
         await page.set_extra_http_headers({"Authorization": f"Bearer {alg_none_token}"})
-        await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+        await _gated_goto(page, url, timeout=15000, wait_until="domcontentloaded")
         body = (await page.content()).lower()
         if any(kw in body for kw in ("admin", "dashboard", "welcome", "profile", "account")):
             result.findings.append(BrowserFinding(
@@ -473,7 +499,7 @@ async def _probe_idor(page, url: str, result: BrowserScanResult, deadline: float
         return
 
     try:
-        await page.goto(url, timeout=15000, wait_until="domcontentloaded")
+        await _gated_goto(page, url, timeout=15000, wait_until="domcontentloaded")
         baseline_content = await page.content()
         baseline_len = len(baseline_content)
     except Exception:  # noqa: BLE001
@@ -487,7 +513,7 @@ async def _probe_idor(page, url: str, result: BrowserScanResult, deadline: float
                 return
             variant_url = _inject_param(url, key, variant_id)
             try:
-                await page.goto(variant_url, timeout=15000, wait_until="domcontentloaded")
+                await _gated_goto(page, variant_url, timeout=15000, wait_until="domcontentloaded")
                 variant_content = (await page.content()).lower()
                 variant_len = len(variant_content)
                 size_diff = abs(variant_len - baseline_len) / max(baseline_len, 1)
@@ -538,7 +564,7 @@ async def _probe_xxe(page, url: str, result: BrowserScanResult, deadline: float 
         }}
         """
         try:
-            response_text = await page.evaluate(js)
+            response_text = await _gated_evaluate(page, js)
             if response_text and any(kw in response_text for kw in ("root:", "daemon:", "169.254", "localhost", "/etc/")):
                 result.findings.append(BrowserFinding(
                     kind="xxe",
@@ -675,9 +701,19 @@ async def _probe(page, url: str, result: BrowserScanResult, mode: str = "pentest
     await _probe_advanced_cohort(page, url, result)
 
 
-async def _run(target: str, headless: bool = True, mode: str = "pentester") -> BrowserScanResult:
+async def _run(
+    target: str,
+    headless: bool = True,
+    mode: str = "pentester",
+    rate_gate: "Optional[AsyncRateGate]" = None,
+) -> BrowserScanResult:
+    # Install module-level gate so probe helpers can call _gated_goto/_gated_evaluate
+    # without threading the gate through every signature.
+    global _RATE_GATE
+    _RATE_GATE = rate_gate
     result = BrowserScanResult(target=target)
-    log_step("browser.scan.start", target=target)
+    log_step("browser.scan.start", target=target,
+             rate_limit_rps=(rate_gate.rps if rate_gate is not None else None))
     try:
         from playwright.async_api import async_playwright  # type: ignore
     except ImportError:
@@ -701,7 +737,7 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
 
             log_step("browser.nav", target=target)
             await session.attach(page)
-            await page.goto(target, timeout=20000, wait_until="domcontentloaded")
+            await _gated_goto(page, target, timeout=20000, wait_until="domcontentloaded")
 
             cookies = await context.cookies()
             for c in cookies:
@@ -742,10 +778,20 @@ async def _run(target: str, headless: bool = True, mode: str = "pentester") -> B
     return result
 
 
-def scan_url(target: str, headless: bool = True, mode: str = "pentester") -> BrowserScanResult:
+def scan_url(
+    target: str,
+    headless: bool = True,
+    mode: str = "pentester",
+    rate_gate: "Optional[AsyncRateGate]" = None,
+) -> BrowserScanResult:
     """Sync wrapper around async playwright scan."""
-    return asyncio.run(_run(target, headless=headless, mode=mode))
+    return asyncio.run(_run(target, headless=headless, mode=mode, rate_gate=rate_gate))
 
 
-async def scan_url_async(target: str, headless: bool = True, mode: str = "pentester") -> BrowserScanResult:
-    return await _run(target, headless=headless, mode=mode)
+async def scan_url_async(
+    target: str,
+    headless: bool = True,
+    mode: str = "pentester",
+    rate_gate: "Optional[AsyncRateGate]" = None,
+) -> BrowserScanResult:
+    return await _run(target, headless=headless, mode=mode, rate_gate=rate_gate)

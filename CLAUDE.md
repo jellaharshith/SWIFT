@@ -1,18 +1,23 @@
+# SWIFT v8.0 -- root
 
-## Skill routing
+Production codebase: `/Users/harshithjella/SWIFT/swift/`.
+Bug-bounty engagement state (screenshots, captured creds, target configs):
+`/Users/harshithjella/Downloads/SWIFT/` -- do NOT commit those into `/SWIFT/`.
 
-When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
+Full architecture lives in `swift/CLAUDE.md` (read that, not this file).
 
-Key routing rules:
-- Product ideas/brainstorming → invoke /office-hours
-- Strategy/scope → invoke /plan-ceo-review
-- Architecture → invoke /plan-eng-review
-- Design system/plan review → invoke /design-consultation or /plan-design-review
-- Full review pipeline → invoke /autoplan
-- Bugs/errors → invoke /investigate
-- QA/testing site behavior → invoke /qa or /qa-only
-- Code review/diff check → invoke /review
-- Visual polish → invoke /design-review
-- Ship/deploy/PR → invoke /ship or /land-and-deploy
-- Save progress → invoke /context-save
-- Resume context → invoke /context-restore
+## Skill routing (gstack / superpowers / caveman shortcuts)
+
+When the user's request matches an available skill, invoke it via the Skill tool.
+
+- Product ideas / brainstorming    -> `/office-hours`
+- Strategy / scope                  -> `/plan-ceo-review`
+- Architecture                      -> `/plan-eng-review`
+- Design system / plan review       -> `/design-consultation` or `/plan-design-review`
+- Full review pipeline              -> `/autoplan`
+- Bugs / errors                     -> `/investigate`
+- QA / testing site behavior        -> `/qa` or `/qa-only`
+- Code review / diff check          -> `/review`
+- Visual polish                     -> `/design-review`
+- Ship / deploy / PR                -> `/ship` or `/land-and-deploy`
+- Save / resume context             -> `/context-save` / `/context-restore`

@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "swiftsec"
-version = "7.0.0"
-description = "SWIFT — AI-powered continuous vulnerability scanner and patch generator."
-readme = { text = "SWIFT (swiftsec) — red-team automation, OSINT, Kali tooling, and Playwright probes. Full docs: https://github.com/jellaharshith/SWIFT", content-type = "text/markdown" }
+version = "8.0.0"
+description = "SWIFT — unified AI red-team platform: OWASP + Kali + LangGraph multi-agent + bug-bounty automation behind one ROE."
+readme = { text = "SWIFT (swiftsec) v8 — red-team automation, OSINT, Kali tooling, Playwright probes, LangGraph multi-agent (Decepticon fork), and bug-bounty hunt automation (claude-bug-bounty fork). Full docs: https://github.com/jellaharshith/SWIFT", content-type = "text/markdown" }
 requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "SWIFT Maintainers" }]
@@ -59,7 +59,20 @@ server  = [
 ]
 oob     = ["dnslib>=0.9"]
 ctf     = ["swiftsec[web,oob]"]
-all = ["swiftsec[sandbox,web,server,oob,intel,kali]"]
+# v8.0 additions
+langgraph = [
+  "langgraph>=0.2.0",
+  "langchain>=0.3.0",
+  "langchain-anthropic>=0.2.0",
+  "langgraph-checkpoint-sqlite>=2.0.0",
+]
+litellm = ["litellm>=1.40.0"]
+graph   = ["networkx>=3.0"]
+graph-neo4j = ["neo4j>=5.0"]
+tmux    = ["libtmux>=0.30"]
+web3    = ["slither-analyzer>=0.10", "mythril>=0.24", "web3>=6.0"]
+bounty  = []  # external Go/Rust tools installed via swift/skills/README.md, not pip
+all = ["swiftsec[sandbox,web,server,oob,intel,kali,langgraph,litellm,graph,tmux,web3]"]
 dev = [
   "pytest>=7.0.0", "pytest-cov>=4.0.0", "pytest-mock>=3.10.0", "pytest-asyncio>=0.23.0",
   "black>=23.0.0", "flake8>=6.0.0", "isort>=5.12.0",
@@ -108,12 +121,23 @@ packages = [
   "swift", "assets", "assets.logo",
   "intel", "intel.sources", "intel.store", "intel.query", "intel.sync",
   "probes",
+  # v8.0 additions
+  "graph", "llm", "bounty", "bounty.web3", "engagement",
+  "agent.langgraph_layer",
+  "agent.langgraph_layer.graphs",
+  "agent.langgraph_layer.agents",
+  "agent.langgraph_layer.tools",
+  "agent.langgraph_layer.middleware",
 ]
 
 [tool.setuptools.package-data]
 "*" = ["*.yaml", "*.yml", "*.json", "*.txt", "*.md"]
 "assets.logo" = ["*.txt", "*.svg", "*.png", "*.ico", "*.md", "*.sh"]
 "kali" = ["Dockerfile"]
+
+[tool.setuptools.data-files]
+"share/swiftsec/deploy" = ["deploy/compose.yaml"]
+"share/swiftsec/deploy/kali" = ["deploy/kali/Dockerfile"]
 
 [tool.ruff]
 line-length = 100
