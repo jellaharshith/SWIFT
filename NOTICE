@@ -1,0 +1,75 @@
+SWIFT v8.0
+==========
+
+This product (SWIFT, the `swiftsec` CLI) is licensed under the MIT License;
+see the LICENSE files in /SWIFT and /SWIFT/swift.
+
+SWIFT v8 merges code, prompts, and skill files from two upstream open-source
+projects. The merge respects each upstream's license; this NOTICE records the
+attributions those licenses require.
+
+
+1. Decepticon  --  https://github.com/PurpleAILAB/Decepticon
+-----------------------------------------------------------
+Copyright (c) 2025 PurpleAILAB
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use those portions of this product except in compliance with the License. You
+may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Portions of SWIFT v8 derived from Decepticon (with the changes described
+below) include:
+
+  * swift/agent/langgraph_layer/                 -- multi-agent layer scaffold
+    and the sixteen specialist prompt definitions inspired by
+    decepticon/agents/standard/*.
+  * swift/sandbox/tmux_session.py                -- libtmux-based interactive
+    session wrapper modeled on decepticon/sandbox_kernel/tmux.py.
+  * swift/engagement/{soundwave,opplan,conops}.py
+                                                 -- engagement-planning
+    workflow modeled on Decepticon's RoE/ConOps/OPPLAN generation.
+  * swift/deploy/compose.yaml                    -- multi-service lab stack
+    inspired by Decepticon's docker-compose.yml.
+
+Changes from upstream:
+  - Re-implemented on a slimmer abstraction (no LangGraph dependency in the
+    default install; a MiniGraph runner walks the same DAG topology). When
+    `langgraph` is installed it can take over.
+  - LiteLLM routing is optional (env-driven), not required.
+  - Neo4j attack graph is optional; default backend is SQLite + NetworkX.
+  - All external tool invocations are gated by SWIFT's existing ROE
+    (swift/security/roe.py) rather than Decepticon's middleware stack.
+
+
+2. claude-bug-bounty  --  https://github.com/shuvonsec/claude-bug-bounty
+-----------------------------------------------------------------------
+Copyright (c) shuvonsec
+Licensed under the MIT License.
+
+Portions of SWIFT v8 derived from claude-bug-bounty include:
+
+  * swift/skills/agents/swift-*.md               -- vendored skill files (8),
+    prefixed `swift-` to avoid namespace collisions.
+  * swift/skills/commands/swift-*.md             -- vendored slash commands
+    (23), prefixed `swift-`.
+  * swift/bounty/hunt_memory.py                  -- cross-engagement audit /
+    pattern / journal stores, modeled on the upstream `memory/` package.
+  * swift/bounty/auth_session.py                 -- session-token propagation
+    into httpx/katana/ffuf/nuclei, modeled on the upstream
+    `tools/auth_session.py`.
+  * swift/bounty/validator.py                    -- 7-question + 4-gate
+    finding validator, codified from the upstream `agents/validator.md`.
+  * swift/bounty/report_formats.py               -- H1 / Bugcrowd / Intigriti
+    / Immunefi report formatters, derived from the upstream
+    `agents/report-writer.md` templates.
+  * swift/bounty/web3/                           -- smart-contract auditor
+    (slither/mythril/patterns), inspired by the upstream `web3/` skill set.
+
+Changes from upstream:
+  - Rewritten in Python (the upstream is a mix of Bash + Python skill files).
+  - Integrated with SWIFT's ROE gate and audit log.
+
+
+The third-party trademarks referenced in this NOTICE are the property of
+their respective owners. Use of those trademarks does not imply endorsement.

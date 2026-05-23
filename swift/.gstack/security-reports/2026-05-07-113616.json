@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "date": "2026-05-07T00:00:00Z",
+  "mode": "daily",
+  "scope": "full",
+  "diff_mode": false,
+  "phases_run": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+  "findings": [
+    {
+      "id": 1, "severity": "HIGH", "confidence": 9, "status": "VERIFIED",
+      "phase": 4, "phase_name": "CI/CD Pipeline Security",
+      "category": "CI/CD",
+      "fingerprint": "cicd-release.yml-pypa-floating-branch",
+      "title": "pypa/gh-action-pypi-publish@release/v1 floating branch reference",
+      "file": ".github/workflows/release.yml", "line": 41,
+      "description": "Rolling branch reference — action code can change silently. Has id-token:write for PyPI publish.",
+      "exploit_scenario": "Attacker compromises pypa repo, pushes malicious code to release/v1 branch, next swiftsec release ships backdoored package to all users.",
+      "impact": "Supply chain compromise of swiftsec PyPI package.",
+      "recommendation": "Pin to SHA: pypa/gh-action-pypi-publish@76f52afe... # v1.12.4",
+      "verification": "self-verified",
+      "remediation_status": "FIXED — commit 0b80194"
+    },
+    {
+      "id": 2, "severity": "MEDIUM", "confidence": 9, "status": "VERIFIED",
+      "phase": 4, "phase_name": "CI/CD Pipeline Security",
+      "category": "CI/CD",
+      "fingerprint": "cicd-ci.yml-codecov-unpinned",
+      "title": "codecov/codecov-action@v4 unpinned third-party action",
+      "file": ".github/workflows/ci.yml", "line": 49,
+      "description": "Moving tag — previously compromised in 2021 supply chain attack. Runs with access to env vars including ANTHROPIC_API_KEY.",
+      "exploit_scenario": "Codecov action updated with credential-harvesting code, runs on every CI push.",
+      "impact": "API key exfiltration.",
+      "recommendation": "Pin to SHA: codecov/codecov-action@0565240... # v4.5.0",
+      "verification": "self-verified",
+      "remediation_status": "FIXED — commit 0b80194"
+    },
+    {
+      "id": 3, "severity": "MEDIUM", "confidence": 8, "status": "VERIFIED",
+      "phase": 4, "phase_name": "CI/CD Pipeline Security",
+      "category": "CI/CD",
+      "fingerprint": "cicd-release.yml-docker-actions-unpinned",
+      "title": "5 Docker publish actions unpinned",
+      "file": ".github/workflows/release.yml", "line": 49,
+      "description": "setup-qemu, setup-buildx, login, metadata, build-push — all tag references with GITHUB_TOKEN flowing through.",
+      "recommendation": "Pin to SHAs.",
+      "verification": "self-verified",
+      "remediation_status": "FIXED — commit 0b80194"
+    },
+    {
+      "id": 4, "severity": "MEDIUM", "confidence": 8, "status": "VERIFIED",
+      "phase": 5, "phase_name": "Infrastructure Shadow Surface",
+      "category": "Infrastructure",
+      "fingerprint": "infra-dockerfile-nuclei-no-checksum",
+      "title": "nuclei binary curl|unzip without version pin or checksum",
+      "file": "Dockerfile", "line": 47,
+      "description": "releases/latest + no SHA-256 verification. MITM or compromised GH release can substitute malicious binary running as root during build.",
+      "recommendation": "Pin NUCLEI_VERSION + sha256sum -c before unzip.",
+      "verification": "self-verified",
+      "remediation_status": "FIXED — commit b6d2304"
+    }
+  ],
+  "filter_stats": {
+    "candidates_scanned": 20, "hard_exclusion_filtered": 12,
+    "confidence_gate_filtered": 4, "verification_filtered": 0, "reported": 4
+  },
+  "totals": { "critical": 0, "high": 1, "medium": 3, "tentative": 0 },
+  "trend": { "prior_report_date": null, "resolved": 0, "persistent": 0, "new": 4, "direction": "first_run" }
+}

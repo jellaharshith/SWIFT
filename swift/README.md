@@ -16,10 +16,31 @@
 ╚══════╝ ╚══╝╚══╝ ╚═╝╚═╝        ╚═╝
 
   AI-Powered Red-Team Automation Pentester
-  v7.0.0 · CISSP/OSCP-grade · Continuous Intelligence + Extended Attack Coverage
+  v8.0.0 · CISSP/OSCP-grade · Multi-Agent Kill Chain + Bug-Bounty Automation
 ```
 
-## What SWIFT does (v7.0)
+## v8.0 -- merged platform
+
+SWIFT v8 absorbs two upstream projects (see `/NOTICE` for attribution):
+
+* [Decepticon](https://github.com/PurpleAILAB/Decepticon) (Apache-2.0)
+  -- 16 specialist agents + 10 LangGraph sub-graphs + Kali sandbox stack.
+* [claude-bug-bounty](https://github.com/shuvonsec/claude-bug-bounty) (MIT)
+  -- 8 agent skills + 23 slash commands + hunt memory + 7-question
+  validator + multi-platform report formatters + web3 auditor.
+
+Eleven new `swiftsec` subcommands:
+
+```
+swiftsec engage           swiftsec hunt           swiftsec web3-audit
+swiftsec redteam-full     swiftsec validate       swiftsec lab
+swiftsec vuln-pipeline    swiftsec autopilot      swiftsec skills
+swiftsec bb-report        swiftsec kg
+```
+
+Run `swiftsec <cmd> --help` for each. Full architecture: `swift/CLAUDE.md`.
+
+## What SWIFT does (v7 surface preserved)
 
 | Phase | Tools | Result |
 |-------|-------|--------|

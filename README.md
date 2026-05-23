@@ -37,6 +37,49 @@
 
 ---
 
+## What's new in v8.0
+
+v8.0 merges three projects into one tool: SWIFT + [Decepticon](https://github.com/PurpleAILAB/Decepticon) (Apache-2.0) + [claude-bug-bounty](https://github.com/shuvonsec/claude-bug-bounty) (MIT). The merged work stays MIT; see `NOTICE` for upstream attribution.
+
+| New v8 subcommand | Purpose |
+|---|---|
+| `swiftsec engage` | Soundwave engagement interview → `roe.yaml` + `OPPLAN.md` + `ConOps.md` |
+| `swiftsec redteam-full` | LangGraph multi-agent kill chain (16 specialists, 10 sub-graphs) |
+| `swiftsec vuln-pipeline` | Scanner → Detector → Verifier → Exploiter → Patcher |
+| `swiftsec hunt` | Bug-bounty workflow with hunt memory + auth chaining |
+| `swiftsec validate` | 7-question + 4-gate finding validator |
+| `swiftsec autopilot` | Hunt + validate + (optional) report, mode-gated (paranoid/normal/yolo) |
+| `swiftsec bb-report` | H1 / Bugcrowd / Intigriti / Immunefi report formatters |
+| `swiftsec web3-audit` | Smart-contract audit (slither + mythril + grep patterns) |
+| `swiftsec lab {up,down,status,graphs}` | Optional docker-compose stack (LiteLLM + Neo4j + sandbox-daemon) |
+| `swiftsec skills {install,uninstall,list}` | Symlink 8 agent skills + 23 slash commands into `~/.claude/` |
+| `swiftsec kg {export,neighbors,prune}` | Attack knowledge graph inspection (SQLite default; Neo4j when `NEO4J_URI` set) |
+
+**Quickstart (default mode, no Docker required):**
+
+```sh
+pip install 'swiftsec[all]'
+swiftsec engage --engagement-id E-01 --targets example.com --contact you@org --quick
+swiftsec hunt --roe .swift-engagement/roe.yaml --program h1-demo --target example.com
+swiftsec validate ./finding.json
+swiftsec bb-report ./finding.json --platform h1 --out report.md
+```
+
+**Quickstart (lab mode, full stack):**
+
+```sh
+swiftsec lab up                                    # docker compose: litellm + neo4j + sandbox-daemon
+export LITELLM_BASE_URL=http://127.0.0.1:4000      # multi-provider LLM routing
+export NEO4J_URI=bolt://127.0.0.1:7687             # attack graph in Neo4j (else SQLite default)
+swiftsec redteam-full --roe roe.yaml --target example.com --graph decepticon
+swiftsec kg export --format cypher --out kg.cypher
+swiftsec lab down
+```
+
+Architecture reference: see `swift/CLAUDE.md`. Per-file upstream attribution: see `NOTICE`.
+
+---
+
 ## Overview
 
 SWIFTSEC is a professional-grade, AI-powered red-team automation platform built for authorized penetration testing engagements. It orchestrates a full offensive pipeline — from passive OSINT through active exploitation and post-exploit simulation — using Claude Sonnet as the reasoning engine and a continuously updated RAG knowledge base.

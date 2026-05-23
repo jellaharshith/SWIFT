@@ -18,6 +18,20 @@ New in v6.0:
   - bizlogic        : Business logic abuse (price manipulation, workflow bypass, race conditions)
   - agentic_loop    : Autonomous multi-step agentic attack loop execution
   - chain_execution : Replay of chained credential-reuse or multi-step attack sequences
+
+New in v7.1:
+  - research        : Claude-driven research over PUBLIC surface (docs, OSS repos, CVEs, papers).
+                      No decompilation, no live exploitation. Produces hypothesis ledger + manual playbook.
+
+New in v8.0 (Decepticon + claude-bug-bounty merge):
+  - tmux_interactive    : Interactive tmux-managed tool sessions (msfconsole, sliver, evil-winrm).
+  - vuln_pipeline       : 5-stage Scanner -> Detector -> Verifier -> Exploiter -> Patcher flow.
+  - engagement_planning : Soundwave interview + OPPLAN + ConOps generation (no live probing).
+  - web3_audit          : Smart contract static analysis (Solidity/EVM/Solana).
+  - auth_chain          : Authenticated tool propagation (session tokens flow to httpx/katana/ffuf/nuclei).
+  - hunt_memory_read    : Read cross-engagement hunt memory (audit.jsonl / patterns.jsonl).
+  - hunt_memory_write   : Write/append to cross-engagement hunt memory.
+  - langgraph_subagent  : Invoke a LangGraph specialist sub-graph (Decepticon-ported agents).
 """
 from __future__ import annotations
 
@@ -33,7 +47,7 @@ try:
 except ImportError:
     yaml = None  # type: ignore
 
-# All recognized technique strings (v5.x + v6.0 + v7.0)
+# All recognized technique strings (v5.x + v6.0 + v7.0 + v7.1 + v8.0)
 KNOWN_TECHNIQUES: frozenset[str] = frozenset({
     # v5.x
     "osint", "active_scan", "exploit", "post_exploit",
@@ -44,6 +58,13 @@ KNOWN_TECHNIQUES: frozenset[str] = frozenset({
     "kali", "probe", "novel",
     # v7.0 — new techniques
     "cloud_recon", "ad_enum", "supply_chain_check", "intel_sync",
+    # v7.1 — research
+    "research",
+    # v8.0 — Decepticon + claude-bug-bounty merge
+    "tmux_interactive", "vuln_pipeline", "engagement_planning",
+    "web3_audit", "auth_chain",
+    "hunt_memory_read", "hunt_memory_write",
+    "langgraph_subagent",
 })
 
 
@@ -68,6 +89,9 @@ class ROE:
     simulate_only: bool = True
     allow_chain_execution: bool = False  # must be True to replay live attack chains
     roe_sha256: str = ""           # populated by load_roe()
+    # v7.1: per-engagement rate limit. None = caller MUST decide (fail-closed for web-scan).
+    rate_limit_rps: Optional[float] = None
+    rate_limit_burst: int = 1
 
 
 def load_roe(path: Path | str) -> ROE:
@@ -111,6 +135,11 @@ def load_roe(path: Path | str) -> ROE:
             stacklevel=2,
         )
 
+    rps_raw = data.get("rate_limit_rps")
+    rate_limit_rps = float(rps_raw) if rps_raw is not None else None
+    if rate_limit_rps is not None and rate_limit_rps <= 0:
+        _deny(f"rate_limit_rps must be > 0, got {rate_limit_rps}")
+
     return ROE(
         engagement_id=data["engagement_id"],
         authorized_targets=list(data["authorized_targets"]),
@@ -122,6 +151,8 @@ def load_roe(path: Path | str) -> ROE:
         simulate_only=simulate_only,
         allow_chain_execution=allow_chain_exec,
         roe_sha256=sha,
+        rate_limit_rps=rate_limit_rps,
+        rate_limit_burst=int(data.get("rate_limit_burst", 1)),
     )
 
 

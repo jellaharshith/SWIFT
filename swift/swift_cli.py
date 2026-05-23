@@ -707,8 +707,28 @@ def build_parser() -> argparse.ArgumentParser:
     upd = sub.add_parser("update", help="Upgrade swiftsec to the latest release via pip")
     upd.add_argument("--check", action="store_true", help="Only check for updates, do not install")
 
+    # ── Research subcommand (v7.1) ────────────────────────────────────────────
+    research = sub.add_parser(
+        "research",
+        help="Claude-driven research over PUBLIC surface (docs, OSS, CVEs). No decompile, no live exploit.",
+    )
+    research.add_argument("--target", required=True,
+                          help="Product / system under research (e.g. 'Burp Suite Pro')")
+    research.add_argument("--focus", required=True,
+                          help="Free-text research focus (e.g. 'project file untrusted mode')")
+    research.add_argument("--roe", required=True,
+                          help="Path to ROE YAML (must include 'research' in allowed_techniques)")
+    research.add_argument("--max-iterations", type=int, default=20,
+                          help="Max agent loop iterations (default: 20)")
+    research.add_argument("--out-dir", default=None,
+                          help="Output directory (default: ./research-out)")
+    research.add_argument("--dry-run", action="store_true",
+                          help="Print tool plan without making any API calls")
+
     web = sub.add_parser("web-scan", help="Playwright-driven live web vulnerability scan")
     web.add_argument("--target", required=True, help="HTTP(S) URL to scan")
+    web.add_argument("--roe", required=True,
+                     help="Path to rules-of-engagement YAML (must include rate_limit_rps)")
     web.add_argument("--headed", action="store_true", help="Show browser (default: headless)")
     web.add_argument("--output-file", default=None, help="JSON report path")
     web.add_argument("--live", action="store_true", help="Show live Rich TUI dashboard")
@@ -813,6 +833,10 @@ def build_parser() -> argparse.ArgumentParser:
     intel_ver.add_argument("--rollback", default=None, metavar="ID",
                            help="Roll back to version ID")
 
+    # v8.0 -- Decepticon + claude-bug-bounty merged subcommands
+    from cli.v8 import register as _register_v8
+    _register_v8(sub)
+
     return parser
 
 
@@ -877,6 +901,42 @@ def run_intel(args: argparse.Namespace) -> dict[str, Any]:
     return {"status": "error", "message": f"Unknown intel subcommand: {subcmd}"}
 
 
+def run_research(args: argparse.Namespace) -> dict[str, Any]:
+    """Claude-driven research agent (v7.1). PUBLIC surface only.
+
+    Loads ROE, validates 'research' technique is allowed, then drives a
+    Sonnet tool-use loop that reads vendor docs / OSS code / CVE database and
+    produces a hypothesis ledger + research playbook in markdown.
+    """
+    from security.roe import load_roe, assert_window_active, assert_technique_allowed
+    from agent.research_agent import ResearchAgent
+
+    roe = load_roe(args.roe)
+    assert_window_active(roe)
+    assert_technique_allowed(roe, "research")
+
+    out_dir = Path(args.out_dir).resolve() if args.out_dir else (Path.cwd() / "research-out")
+    log_step("cli.research.start", target=args.target, focus=args.focus,
+             engagement_id=roe.engagement_id, max_iterations=args.max_iterations,
+             dry_run=bool(args.dry_run))
+
+    agent = ResearchAgent(
+        target=args.target,
+        focus=args.focus,
+        roe=roe,
+        max_iterations=args.max_iterations,
+        engagement_dir=out_dir,
+        dry_run=bool(args.dry_run),
+    )
+    result = asyncio.run(agent.run())
+    log_step("cli.research.finish",
+             target=args.target,
+             status=result.get("status"),
+             iterations=result.get("iterations"),
+             hypotheses=len(result.get("hypotheses", [])))
+    return result
+
+
 def run_web_scan(args: argparse.Namespace) -> dict[str, Any]:
     from browser.playwright_runner import scan_url
     from config.consent import require_consent
@@ -921,9 +981,26 @@ def run_web_scan(args: argparse.Namespace) -> dict[str, Any]:
 def _do_web_scan(args: argparse.Namespace) -> dict[str, Any]:
     """Inner web scan logic (separated for TUI wrapping)."""
     from browser.playwright_runner import scan_url
+    from browser.rate_gate import AsyncRateGate
+    from security.roe import load_roe, assert_target_in_scope, assert_window_active, assert_technique_allowed
 
-    log_step("cli.web_scan.start", target=args.target, headed=args.headed)
-    result = scan_url(args.target, headless=not args.headed)
+    # ROE gate: load + validate (fail-closed)
+    roe = load_roe(args.roe)
+    assert_window_active(roe)
+    assert_target_in_scope(roe, args.target)
+    assert_technique_allowed(roe, "active_scan")
+
+    if roe.rate_limit_rps is None:
+        _fail_closed(
+            f"ROE '{roe.engagement_id}' is missing required field `rate_limit_rps` for web-scan.\n"
+            f"  Add to {args.roe}:  rate_limit_rps: 1   (or program-appropriate value)"
+        )
+
+    gate = AsyncRateGate(rps=roe.rate_limit_rps, burst=roe.rate_limit_burst)
+    log_step("cli.web_scan.start", target=args.target, headed=args.headed,
+             rate_limit_rps=roe.rate_limit_rps, rate_limit_burst=roe.rate_limit_burst,
+             engagement_id=roe.engagement_id)
+    result = scan_url(args.target, headless=not args.headed, rate_gate=gate)
     out = Path(args.output_file) if args.output_file else Path(f"web-scan-{uuid_safe(args.target)}.json")
     out.write_text(json.dumps(result.to_dict(), indent=2), encoding="utf-8")
     log_step("cli.web_scan.finish", target=args.target, findings=len(result.findings), artifact=str(out))
@@ -1295,10 +1372,11 @@ def main() -> None:
         _load_config(args.config)
 
     _V6_NO_ZERO_TRUST = {"audit", "plugin", "agent-status"}
+    from cli.v8 import ZERO_TRUST_EXEMPT as _V8_EXEMPT
     if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan",
                              "wizard", "web-scan", "privesc", "redteam", "osint",
                              "payload", "niche", "chain", "version", "update", "auto",
-                             "init"} | _V6_NO_ZERO_TRUST:
+                             "init"} | _V6_NO_ZERO_TRUST | _V8_EXEMPT:
         _ensure_zero_trust(args)
 
     # v6.0 commands handled inline (no JSON dump)
@@ -1346,11 +1424,16 @@ def main() -> None:
         "auto": run_auto,
         "intel": run_intel,
         "init": run_init,
+        "research": run_research,
     }
+    # v8.0 -- merge in Decepticon + claude-bug-bounty subcommand handlers
+    from cli.v8 import HANDLERS as _V8_HANDLERS, NO_JSON_DUMP as _V8_NO_JSON
+    handlers.update(_V8_HANDLERS)
+    no_json_dump = NO_JSON_DUMP_CMDS | _V8_NO_JSON
     try:
         payload = handlers[args.command](args)
         log_step("cli.complete", command=args.command)
-        if args.command not in NO_JSON_DUMP_CMDS:
+        if args.command not in no_json_dump:
             print(json.dumps(payload, indent=2, sort_keys=True))
     except KeyboardInterrupt:
         print("\nInterrupted.", file=sys.stderr)

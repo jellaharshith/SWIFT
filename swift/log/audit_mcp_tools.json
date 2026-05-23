@@ -19757,5 +19757,1451 @@
     "error_message": "Input validation: 1 validation error for SemgrepInput\nruleset\n  Value error, Ruleset 'invalid-ruleset' not approved. Allowed: auto, p/c, p/cpp, p/owasp-top-ten, p/security-audit [type=value_error, input_value='invalid-ruleset', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.9/v/value_error",
     "previous_hash": "048db6840a9ea1ee19da49852fa31636f2b46834e8f662c7f4f9bd1b7930e7bb",
     "current_hash": "4316d98b8b198049b9d2c8c607320fe46351304f7773f68338858152f77ba4e7"
+  },
+  {
+    "entry_id": 314,
+    "timestamp": "2026-05-13T05:47:42.592106+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "operation": "submit_file",
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmphf4rah2p/test.bin",
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: api_call",
+    "previous_hash": "4316d98b8b198049b9d2c8c607320fe46351304f7773f68338858152f77ba4e7",
+    "current_hash": "83eac1cb52e69f26d87181514ba7b652e0791c0e034b1ae17605bea641264e43"
+  },
+  {
+    "entry_id": 315,
+    "timestamp": "2026-05-13T05:47:42.619486+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpscz7c32j/test.bin"
+    },
+    "outputs": {
+      "task_id": 42
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "83eac1cb52e69f26d87181514ba7b652e0791c0e034b1ae17605bea641264e43",
+    "current_hash": "e0a8123644658120b53a86d37657e0cf4152e29bd1faa872208a97b1ef57628b"
+  },
+  {
+    "entry_id": 316,
+    "timestamp": "2026-05-13T05:47:42.634895+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpqcpm7xrf/test.bin"
+    },
+    "outputs": {
+      "task_id": 42
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "e0a8123644658120b53a86d37657e0cf4152e29bd1faa872208a97b1ef57628b",
+    "current_hash": "2ba08cdb7745a8c732e13044ab87e0f3d988698bcd74f55df6637474ec64476f"
+  },
+  {
+    "entry_id": 317,
+    "timestamp": "2026-05-13T05:47:42.649525+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "operation": "submit_file",
+      "file_path": "/nonexistent/file.bin",
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "File not found: /nonexistent/file.bin",
+    "previous_hash": "2ba08cdb7745a8c732e13044ab87e0f3d988698bcd74f55df6637474ec64476f",
+    "current_hash": "7e799ea15addea8f75c0f5a171cb2c02853aeca7fbd17c20fd6881cc5bca52ed"
+  },
+  {
+    "entry_id": 318,
+    "timestamp": "2026-05-13T05:47:42.664972+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "operation": "submit_file",
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpbs2ie9ok/test.bin",
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "7e799ea15addea8f75c0f5a171cb2c02853aeca7fbd17c20fd6881cc5bca52ed",
+    "current_hash": "eb74e1e22aea66c44f2db2bf65d73259af7cad26a5ff0332078e567973539131"
+  },
+  {
+    "entry_id": 319,
+    "timestamp": "2026-05-13T05:47:42.680858+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_report",
+    "inputs": {
+      "task_id": 42
+    },
+    "outputs": {
+      "status": "reported"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "eb74e1e22aea66c44f2db2bf65d73259af7cad26a5ff0332078e567973539131",
+    "current_hash": "7956711794412f1e193902230c38215e49e21a65e34bd41f75f309100fd672b4"
+  },
+  {
+    "entry_id": 320,
+    "timestamp": "2026-05-13T05:47:42.703124+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_report",
+    "inputs": {
+      "operation": "get_report",
+      "file_path": null,
+      "task_id": 42
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "7956711794412f1e193902230c38215e49e21a65e34bd41f75f309100fd672b4",
+    "current_hash": "ee4e2d71499aa2e4e45fe421a0cbfc4c1fe2857fab99b8a29c544d17114d7b67"
+  },
+  {
+    "entry_id": 321,
+    "timestamp": "2026-05-13T05:47:42.719732+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_status",
+    "inputs": {
+      "task_id": 42
+    },
+    "outputs": {
+      "status": "reported"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "ee4e2d71499aa2e4e45fe421a0cbfc4c1fe2857fab99b8a29c544d17114d7b67",
+    "current_hash": "e594e701362d8092ef40a12cf1ad48dd5c520076171e856c0b9038f5bcc2f336"
+  },
+  {
+    "entry_id": 322,
+    "timestamp": "2026-05-13T05:47:42.735110+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_status",
+    "inputs": {
+      "operation": "get_status",
+      "file_path": null,
+      "task_id": 42
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "e594e701362d8092ef40a12cf1ad48dd5c520076171e856c0b9038f5bcc2f336",
+    "current_hash": "a860e9a5704f7a29ad3ee2f304289250309fc2e20f3c4cf7f2329ad82db8d541"
+  },
+  {
+    "entry_id": 323,
+    "timestamp": "2026-05-13T05:47:42.749989+00:00",
+    "tool_name": "cuckoo",
+    "action": "list_tasks",
+    "inputs": {},
+    "outputs": {
+      "task_count": 2
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "a860e9a5704f7a29ad3ee2f304289250309fc2e20f3c4cf7f2329ad82db8d541",
+    "current_hash": "a081704520ae80adb10b87cf824a1bd92d25b67f0304671c90e2c689a286bba8"
+  },
+  {
+    "entry_id": 324,
+    "timestamp": "2026-05-13T05:47:42.764918+00:00",
+    "tool_name": "cuckoo",
+    "action": "list_tasks",
+    "inputs": {
+      "operation": "list_tasks",
+      "file_path": null,
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "a081704520ae80adb10b87cf824a1bd92d25b67f0304671c90e2c689a286bba8",
+    "current_hash": "2846aa27c3429a1fae01e5a9190a0bc160175169b04cb2a6fd6242252a9543a0"
+  },
+  {
+    "entry_id": 325,
+    "timestamp": "2026-05-13T05:47:42.864721+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp4e1djhht"
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: read_file",
+    "previous_hash": "2846aa27c3429a1fae01e5a9190a0bc160175169b04cb2a6fd6242252a9543a0",
+    "current_hash": "7691ad1f73717c18231fee5e9a6787b3df23266ad46d5cfaf6b0b21935ac848c"
+  },
+  {
+    "entry_id": 326,
+    "timestamp": "2026-05-13T05:47:42.880943+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpyw1_ew1k"
+    },
+    "outputs": {
+      "is_git_repo": false
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "7691ad1f73717c18231fee5e9a6787b3df23266ad46d5cfaf6b0b21935ac848c",
+    "current_hash": "68c8dd6175c4fb5b7b454f3ce6cb6da3c78a31ee1c2d4aad947d1fcb3f4a6a4b"
+  },
+  {
+    "entry_id": 327,
+    "timestamp": "2026-05-13T05:47:42.935603+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpjnvza3wj"
+    },
+    "outputs": {
+      "is_git_repo": false
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "68c8dd6175c4fb5b7b454f3ce6cb6da3c78a31ee1c2d4aad947d1fcb3f4a6a4b",
+    "current_hash": "a1a10b17f8aac5a4b4993547dbb797af299cb19553427f75a6fce452aee79c7c"
+  },
+  {
+    "entry_id": 328,
+    "timestamp": "2026-05-13T05:47:42.950344+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpvakm3p6n"
+    },
+    "outputs": {
+      "is_git_repo": true,
+      "branch": "main",
+      "working_tree_clean": true,
+      "suspicious_signals_count": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "a1a10b17f8aac5a4b4993547dbb797af299cb19553427f75a6fce452aee79c7c",
+    "current_hash": "35779c39cf9f13bff6bab5b024c01707d54e83e5d185762c0f3ea5a54c818a20"
+  },
+  {
+    "entry_id": 329,
+    "timestamp": "2026-05-13T05:47:47.510909+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: scan_repo",
+    "previous_hash": "35779c39cf9f13bff6bab5b024c01707d54e83e5d185762c0f3ea5a54c818a20",
+    "current_hash": "205213042eb8b52f73b9e88fbe7444bf9dedf2b6446c723927921baf1ae8927a"
+  },
+  {
+    "entry_id": 330,
+    "timestamp": "2026-05-13T05:47:47.533666+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 1,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "205213042eb8b52f73b9e88fbe7444bf9dedf2b6446c723927921baf1ae8927a",
+    "current_hash": "7593477b2034149a0e82920ac46e2a68f1ad9e4d38f62945490ba09cd9d2cfd1"
+  },
+  {
+    "entry_id": 331,
+    "timestamp": "2026-05-13T05:47:47.558956+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 0,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "7593477b2034149a0e82920ac46e2a68f1ad9e4d38f62945490ba09cd9d2cfd1",
+    "current_hash": "a69dc26b326eae111eeebae861e658df3c1c1b75a8ebfc462c4cd950ed2def3a"
+  },
+  {
+    "entry_id": 332,
+    "timestamp": "2026-05-13T05:47:47.573776+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 3,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "a69dc26b326eae111eeebae861e658df3c1c1b75a8ebfc462c4cd950ed2def3a",
+    "current_hash": "8fc7f43802930cb022f738ac212f02bd7a0333f53a74ae37ee1a9d1d1d1a12fb"
+  },
+  {
+    "entry_id": 333,
+    "timestamp": "2026-05-13T05:47:47.588748+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 1,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "8fc7f43802930cb022f738ac212f02bd7a0333f53a74ae37ee1a9d1d1d1a12fb",
+    "current_hash": "2287176204813f083b95fe72ad8388eb76287d3e2122bdb34fe05866e0e8e546"
+  },
+  {
+    "entry_id": 334,
+    "timestamp": "2026-05-13T05:47:47.603625+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "os",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 0,
+      "mode": "os"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "2287176204813f083b95fe72ad8388eb76287d3e2122bdb34fe05866e0e8e546",
+    "current_hash": "2142ba09f3d29b3737fb1f77246865a25f13aaf90ec0994f43c6330b6cc06b8e"
+  },
+  {
+    "entry_id": 335,
+    "timestamp": "2026-05-13T05:47:47.618821+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Scan timed out after 5 minutes",
+    "previous_hash": "2142ba09f3d29b3737fb1f77246865a25f13aaf90ec0994f43c6330b6cc06b8e",
+    "current_hash": "6fa23cbbdb092cb42842af17bfb9ff76f438c6ea9cd8eff40317dc60557d2215"
+  },
+  {
+    "entry_id": 336,
+    "timestamp": "2026-05-13T05:47:48.653843+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo",
+        "test"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: test_patch",
+    "previous_hash": "6fa23cbbdb092cb42842af17bfb9ff76f438c6ea9cd8eff40317dc60557d2215",
+    "current_hash": "d5e6dd34b69863959d41291828602a93aa6fb3ef1bfda503a0d707102cd91aae"
+  },
+  {
+    "entry_id": 337,
+    "timestamp": "2026-05-13T05:47:48.668591+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo",
+        "test"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "d5e6dd34b69863959d41291828602a93aa6fb3ef1bfda503a0d707102cd91aae",
+    "current_hash": "e447e16b1f664629cddad291fbaa9cad7a42f093a4d0cb1ee866e565dd2a1824"
+  },
+  {
+    "entry_id": 338,
+    "timestamp": "2026-05-13T05:47:48.694672+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo",
+        "Hello, World!"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "e447e16b1f664629cddad291fbaa9cad7a42f093a4d0cb1ee866e565dd2a1824",
+    "current_hash": "1143fb53f06a8603a1902498ed474595d1ef53824767753fe8b923bc334e52ea"
+  },
+  {
+    "entry_id": 339,
+    "timestamp": "2026-05-13T05:47:48.709006+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "false"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 1,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "1143fb53f06a8603a1902498ed474595d1ef53824767753fe8b923bc334e52ea",
+    "current_hash": "78b5c26c02bf40e6d9cc9fd617fcdc0d668812b6df9a5288a2afacc3295bfd9c"
+  },
+  {
+    "entry_id": 340,
+    "timestamp": "2026-05-13T05:47:48.728879+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "sleep",
+        "1000"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "duration_ms": 0,
+      "timed_out": true
+    },
+    "status": "failure",
+    "error_message": "Timeout after 30s",
+    "previous_hash": "78b5c26c02bf40e6d9cc9fd617fcdc0d668812b6df9a5288a2afacc3295bfd9c",
+    "current_hash": "827505e6eed67da6cd95490d5017a07163d3d524de0a603bf086e67bfe4e17e6"
+  },
+  {
+    "entry_id": 341,
+    "timestamp": "2026-05-13T05:47:48.743911+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "827505e6eed67da6cd95490d5017a07163d3d524de0a603bf086e67bfe4e17e6",
+    "current_hash": "63861c15b59e2d49b4c41d17a7f69ab55ae87668f1e3e0e5793e7cb72db156cc"
+  },
+  {
+    "entry_id": 342,
+    "timestamp": "2026-05-13T05:47:48.758528+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.12",
+      "command": [
+        "python",
+        "test.py"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "63861c15b59e2d49b4c41d17a7f69ab55ae87668f1e3e0e5793e7cb72db156cc",
+    "current_hash": "77285de6771709efef0ce0b5845e60fe47cef0eda89be121dfbc8b31b8d18b72"
+  },
+  {
+    "entry_id": 343,
+    "timestamp": "2026-05-13T05:47:48.773698+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "python",
+        "test.py"
+      ],
+      "mounts": [
+        "/tmp/code:/code:ro"
+      ],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "77285de6771709efef0ce0b5845e60fe47cef0eda89be121dfbc8b31b8d18b72",
+    "current_hash": "0c1cb622cfc22488dfc91eefa54108fcbb6fa07aaa5b7a401f095c5a82524f2f"
+  },
+  {
+    "entry_id": 344,
+    "timestamp": "2026-05-13T05:47:48.844031+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpvnewmmxu",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: scan_repo",
+    "previous_hash": "0c1cb622cfc22488dfc91eefa54108fcbb6fa07aaa5b7a401f095c5a82524f2f",
+    "current_hash": "66a298bad17b0e9d781a1da3152fe289158eac4c5b196a6e83be184beff98894"
+  },
+  {
+    "entry_id": 345,
+    "timestamp": "2026-05-13T05:47:48.858963+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpncsfcxqe",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 0,
+      "ruleset_used": "auto"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "66a298bad17b0e9d781a1da3152fe289158eac4c5b196a6e83be184beff98894",
+    "current_hash": "188e61219d9fe94ed716dec650f78fc84575a7aa5a4fcc27cf9556dd45529a7c"
+  },
+  {
+    "entry_id": 346,
+    "timestamp": "2026-05-13T05:47:48.874204+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp5ll47t26",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 0,
+      "ruleset_used": "auto"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "188e61219d9fe94ed716dec650f78fc84575a7aa5a4fcc27cf9556dd45529a7c",
+    "current_hash": "8c62a5d1782e8512d5a5a793cc6eb1ce4a65e13690dc1eeed0fd155c0548eddf"
+  },
+  {
+    "entry_id": 347,
+    "timestamp": "2026-05-13T05:47:48.889860+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpaf8nv1ll",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 2,
+      "ruleset_used": "auto"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "8c62a5d1782e8512d5a5a793cc6eb1ce4a65e13690dc1eeed0fd155c0548eddf",
+    "current_hash": "f1ffe6942a0d3fe3b6a0159707de02323d36b95d83de10e0cee2948f562f896a"
+  },
+  {
+    "entry_id": 348,
+    "timestamp": "2026-05-13T05:47:48.905188+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp6oxrx5rx",
+      "ruleset": "p/security-audit",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 0,
+      "ruleset_used": "p/security-audit"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "f1ffe6942a0d3fe3b6a0159707de02323d36b95d83de10e0cee2948f562f896a",
+    "current_hash": "07790504bdc2722657c086388e50acaa95ae9690108d9049e3f01433d42ea093"
+  },
+  {
+    "entry_id": 349,
+    "timestamp": "2026-05-13T05:47:48.920740+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp1e4ldkwb",
+      "ruleset": "auto",
+      "timeout_seconds": 10
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Timeout after 10s",
+    "previous_hash": "07790504bdc2722657c086388e50acaa95ae9690108d9049e3f01433d42ea093",
+    "current_hash": "11e80aa1c6f891187fc3148a42f3d4fc4340246c47669fb022e4d9e1e7516047"
+  },
+  {
+    "entry_id": 350,
+    "timestamp": "2026-05-13T05:47:48.937521+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpp_oy5p4z",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "JSON parse error: Expecting value: line 1 column 1 (char 0)",
+    "previous_hash": "11e80aa1c6f891187fc3148a42f3d4fc4340246c47669fb022e4d9e1e7516047",
+    "current_hash": "0dbb6a86f32fa7ffc6a471e75b973af2ed42b74dde2030e8237491fe2b4605c7"
+  },
+  {
+    "entry_id": 351,
+    "timestamp": "2026-05-13T05:47:48.950286+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpp_oy5p4z",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Semgrep output not valid JSON: Expecting value: line 1 column 1 (char 0)",
+    "previous_hash": "0dbb6a86f32fa7ffc6a471e75b973af2ed42b74dde2030e8237491fe2b4605c7",
+    "current_hash": "db276370f6040179676c8e5d394abbcaf59094b7ff23bfdb2d8bcf133807845c"
+  },
+  {
+    "entry_id": 352,
+    "timestamp": "2026-05-13T05:47:48.966081+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpp9s6v_cc",
+      "ruleset": "invalid-ruleset",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Input validation: 1 validation error for SemgrepInput\nruleset\n  Value error, Ruleset 'invalid-ruleset' not approved. Allowed: auto, p/c, p/cpp, p/owasp-top-ten, p/security-audit [type=value_error, input_value='invalid-ruleset', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "previous_hash": "db276370f6040179676c8e5d394abbcaf59094b7ff23bfdb2d8bcf133807845c",
+    "current_hash": "c81de6b18fdd77ebbe00f59e1b721d250e42320bf3682244a6baec1e3d167e4d"
+  },
+  {
+    "entry_id": 353,
+    "timestamp": "2026-05-22T02:48:56.705438+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "operation": "submit_file",
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpbbeb6h92/test.bin",
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: api_call",
+    "previous_hash": "c81de6b18fdd77ebbe00f59e1b721d250e42320bf3682244a6baec1e3d167e4d",
+    "current_hash": "b950ddeafbeabf6fb1ad9c57d758a85bbca224d007ff25e8240c38196442e09d"
+  },
+  {
+    "entry_id": 354,
+    "timestamp": "2026-05-22T02:48:56.722458+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpeidfx3wf/test.bin"
+    },
+    "outputs": {
+      "task_id": 42
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "b950ddeafbeabf6fb1ad9c57d758a85bbca224d007ff25e8240c38196442e09d",
+    "current_hash": "9bc950e5d2a27865c3b70a89c5a163451a22f36a84b63a1596fb6390b57664b9"
+  },
+  {
+    "entry_id": 355,
+    "timestamp": "2026-05-22T02:48:56.738613+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp_vipw3mp/test.bin"
+    },
+    "outputs": {
+      "task_id": 42
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "9bc950e5d2a27865c3b70a89c5a163451a22f36a84b63a1596fb6390b57664b9",
+    "current_hash": "3f15394257b39359f635861e842d78c8e52b59f81492d58ce296ec5e414bb11c"
+  },
+  {
+    "entry_id": 356,
+    "timestamp": "2026-05-22T02:48:56.754233+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "operation": "submit_file",
+      "file_path": "/nonexistent/file.bin",
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "File not found: /nonexistent/file.bin",
+    "previous_hash": "3f15394257b39359f635861e842d78c8e52b59f81492d58ce296ec5e414bb11c",
+    "current_hash": "ad0117c8d66cbf42573777cc60ec182529f0de4fd8fded34bc4b105863fad7c7"
+  },
+  {
+    "entry_id": 357,
+    "timestamp": "2026-05-22T02:48:56.774364+00:00",
+    "tool_name": "cuckoo",
+    "action": "submit_file",
+    "inputs": {
+      "operation": "submit_file",
+      "file_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpv55ao69f/test.bin",
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "ad0117c8d66cbf42573777cc60ec182529f0de4fd8fded34bc4b105863fad7c7",
+    "current_hash": "ae254f11e10015c7960050dcacc37596dd73e17b3bd7e96a88bf8cde184c4910"
+  },
+  {
+    "entry_id": 358,
+    "timestamp": "2026-05-22T02:48:56.789564+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_report",
+    "inputs": {
+      "task_id": 42
+    },
+    "outputs": {
+      "status": "reported"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "ae254f11e10015c7960050dcacc37596dd73e17b3bd7e96a88bf8cde184c4910",
+    "current_hash": "8d868fb72b6cf4caee455f0dc314e56b6af5407ee26e9122e5c2a670d9dac676"
+  },
+  {
+    "entry_id": 359,
+    "timestamp": "2026-05-22T02:48:56.822417+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_report",
+    "inputs": {
+      "operation": "get_report",
+      "file_path": null,
+      "task_id": 42
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "8d868fb72b6cf4caee455f0dc314e56b6af5407ee26e9122e5c2a670d9dac676",
+    "current_hash": "6d2a51f6818a34f80f6ebb09470931d9a1aed76060bd6779bdfbba65480f2307"
+  },
+  {
+    "entry_id": 360,
+    "timestamp": "2026-05-22T02:48:56.837535+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_status",
+    "inputs": {
+      "task_id": 42
+    },
+    "outputs": {
+      "status": "reported"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "6d2a51f6818a34f80f6ebb09470931d9a1aed76060bd6779bdfbba65480f2307",
+    "current_hash": "ec5d3eaa56a8fe7c04b930f31448a505b815c9ba38f67a4f966e215e845e2176"
+  },
+  {
+    "entry_id": 361,
+    "timestamp": "2026-05-22T02:48:56.852585+00:00",
+    "tool_name": "cuckoo",
+    "action": "get_status",
+    "inputs": {
+      "operation": "get_status",
+      "file_path": null,
+      "task_id": 42
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "ec5d3eaa56a8fe7c04b930f31448a505b815c9ba38f67a4f966e215e845e2176",
+    "current_hash": "fd1d48bc1096627944287b3d4af0e7060aac520283d2e83fc39997653398de8a"
+  },
+  {
+    "entry_id": 362,
+    "timestamp": "2026-05-22T02:48:56.867717+00:00",
+    "tool_name": "cuckoo",
+    "action": "list_tasks",
+    "inputs": {},
+    "outputs": {
+      "task_count": 2
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "fd1d48bc1096627944287b3d4af0e7060aac520283d2e83fc39997653398de8a",
+    "current_hash": "c9b7efe406bea4806e5bc1288db20622d9167d2cab4dba0eededc71e005789d3"
+  },
+  {
+    "entry_id": 363,
+    "timestamp": "2026-05-22T02:48:56.882091+00:00",
+    "tool_name": "cuckoo",
+    "action": "list_tasks",
+    "inputs": {
+      "operation": "list_tasks",
+      "file_path": null,
+      "task_id": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "API error",
+    "previous_hash": "c9b7efe406bea4806e5bc1288db20622d9167d2cab4dba0eededc71e005789d3",
+    "current_hash": "b78a87fbb719d919d8b6b443112571f066e57686f8d5e3b69816d64a81f3ae5e"
+  },
+  {
+    "entry_id": 364,
+    "timestamp": "2026-05-22T02:48:56.987331+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmph7xobxow"
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: read_file",
+    "previous_hash": "b78a87fbb719d919d8b6b443112571f066e57686f8d5e3b69816d64a81f3ae5e",
+    "current_hash": "d83fd95b40653191b39cfef207dea71fb9fa2eba49af56aa03cba54d1aa2a49f"
+  },
+  {
+    "entry_id": 365,
+    "timestamp": "2026-05-22T02:48:57.002297+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpx__s1rxj"
+    },
+    "outputs": {
+      "is_git_repo": false
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "d83fd95b40653191b39cfef207dea71fb9fa2eba49af56aa03cba54d1aa2a49f",
+    "current_hash": "71ffe156f33a2fb99967a7f931d106d666336ff0a9a769d2675025569ee1757b"
+  },
+  {
+    "entry_id": 366,
+    "timestamp": "2026-05-22T02:48:57.071694+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmphyllhst0"
+    },
+    "outputs": {
+      "is_git_repo": false
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "71ffe156f33a2fb99967a7f931d106d666336ff0a9a769d2675025569ee1757b",
+    "current_hash": "a8eb0deb3f0cea0500a44b07cea94dd4f5af3da1b216b44b43aca2bff732b8e5"
+  },
+  {
+    "entry_id": 367,
+    "timestamp": "2026-05-22T02:48:57.086911+00:00",
+    "tool_name": "git_integrity",
+    "action": "verify",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpy4qe4lts"
+    },
+    "outputs": {
+      "is_git_repo": true,
+      "branch": "main",
+      "working_tree_clean": true,
+      "suspicious_signals_count": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "a8eb0deb3f0cea0500a44b07cea94dd4f5af3da1b216b44b43aca2bff732b8e5",
+    "current_hash": "bffa821f374917f4cf3246ed14e95e05c1d8c1a38500159e86e746c32555ee94"
+  },
+  {
+    "entry_id": 368,
+    "timestamp": "2026-05-22T02:49:03.030250+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: scan_repo",
+    "previous_hash": "bffa821f374917f4cf3246ed14e95e05c1d8c1a38500159e86e746c32555ee94",
+    "current_hash": "9d55b76e77d4639a3842684156a4c73b70ff3f1fe39109c50d522ff7997271a3"
+  },
+  {
+    "entry_id": 369,
+    "timestamp": "2026-05-22T02:49:03.049789+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 1,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "9d55b76e77d4639a3842684156a4c73b70ff3f1fe39109c50d522ff7997271a3",
+    "current_hash": "7017fac36ac3a4b93fdfa918d3a30082f8f17036ac7a09692affe2923e7ceedd"
+  },
+  {
+    "entry_id": 370,
+    "timestamp": "2026-05-22T02:49:03.076072+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 0,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "7017fac36ac3a4b93fdfa918d3a30082f8f17036ac7a09692affe2923e7ceedd",
+    "current_hash": "5399e9042fc75452f99e52f41b49e64a4d32a7901fc8a47ef9e0f574d9406de2"
+  },
+  {
+    "entry_id": 371,
+    "timestamp": "2026-05-22T02:49:03.090747+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 3,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "5399e9042fc75452f99e52f41b49e64a4d32a7901fc8a47ef9e0f574d9406de2",
+    "current_hash": "fb371068727a9412c84ac0fb95488bc4261e3065bbf83c2bf9e38646371df0fc"
+  },
+  {
+    "entry_id": 372,
+    "timestamp": "2026-05-22T02:49:03.105925+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 1,
+      "mode": "basic"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "fb371068727a9412c84ac0fb95488bc4261e3065bbf83c2bf9e38646371df0fc",
+    "current_hash": "514f5f86897fe5da6c4c6ee801b4971e7d299cdf7ed133569f05adf287fb1670"
+  },
+  {
+    "entry_id": 373,
+    "timestamp": "2026-05-22T02:49:03.120586+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "os",
+      "host_timeout": "30s"
+    },
+    "outputs": {
+      "target": "192.168.1.1",
+      "open_ports_count": 0,
+      "mode": "os"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "514f5f86897fe5da6c4c6ee801b4971e7d299cdf7ed133569f05adf287fb1670",
+    "current_hash": "24b3d00f25a9fd7e022fff34bd81bbe72059588b962b3e88c0268b4c2705bcd0"
+  },
+  {
+    "entry_id": 374,
+    "timestamp": "2026-05-22T02:49:03.136017+00:00",
+    "tool_name": "nmap",
+    "action": "scan",
+    "inputs": {
+      "target": "192.168.1.1",
+      "ports": "1-1000",
+      "mode": "basic",
+      "host_timeout": "30s"
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Scan timed out after 5 minutes",
+    "previous_hash": "24b3d00f25a9fd7e022fff34bd81bbe72059588b962b3e88c0268b4c2705bcd0",
+    "current_hash": "30ceb0c07f7e4cd846d9dcf94e2321bc78ab654610b7da41c17b3bf55287df7f"
+  },
+  {
+    "entry_id": 375,
+    "timestamp": "2026-05-22T02:49:15.996598+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo",
+        "test"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: test_patch",
+    "previous_hash": "30ceb0c07f7e4cd846d9dcf94e2321bc78ab654610b7da41c17b3bf55287df7f",
+    "current_hash": "6f2e351518856fbabbd76a8ee238b58125e6544fb22f0ebd6eab6a5c5c95edec"
+  },
+  {
+    "entry_id": 376,
+    "timestamp": "2026-05-22T02:49:16.011953+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo",
+        "test"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "6f2e351518856fbabbd76a8ee238b58125e6544fb22f0ebd6eab6a5c5c95edec",
+    "current_hash": "355c382fef8de49f9881d2f0af82c8b1592bec1c3d4e7d0472c967223b3a0bb0"
+  },
+  {
+    "entry_id": 377,
+    "timestamp": "2026-05-22T02:49:16.053612+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo",
+        "Hello, World!"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "355c382fef8de49f9881d2f0af82c8b1592bec1c3d4e7d0472c967223b3a0bb0",
+    "current_hash": "509184d4b9f13461adf48b883f03f38189a0b5a1883e60cbe35bb4b5c5c5b671"
+  },
+  {
+    "entry_id": 378,
+    "timestamp": "2026-05-22T02:49:16.068464+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "false"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 1,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "509184d4b9f13461adf48b883f03f38189a0b5a1883e60cbe35bb4b5c5c5b671",
+    "current_hash": "246fa4435bb8c644660a43ae7bee6d710e41047a39f53342d520488988a607f3"
+  },
+  {
+    "entry_id": 379,
+    "timestamp": "2026-05-22T02:49:16.084123+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "sleep",
+        "1000"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "duration_ms": 0,
+      "timed_out": true
+    },
+    "status": "failure",
+    "error_message": "Timeout after 30s",
+    "previous_hash": "246fa4435bb8c644660a43ae7bee6d710e41047a39f53342d520488988a607f3",
+    "current_hash": "4906401520350cfe584bc7997c28306db153f7a639569c001a442d5279ac802f"
+  },
+  {
+    "entry_id": 380,
+    "timestamp": "2026-05-22T02:49:16.100869+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "echo"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "4906401520350cfe584bc7997c28306db153f7a639569c001a442d5279ac802f",
+    "current_hash": "c4a9324e98b9d3eb23a59f009d7b9b20119d1d0c60734bbedbc81fc346786089"
+  },
+  {
+    "entry_id": 381,
+    "timestamp": "2026-05-22T02:49:16.116421+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.12",
+      "command": [
+        "python",
+        "test.py"
+      ],
+      "mounts": [],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "c4a9324e98b9d3eb23a59f009d7b9b20119d1d0c60734bbedbc81fc346786089",
+    "current_hash": "84afd797e34414b7d2e2c2c2306282129a4e768326b910d7e2fde9abd9d7f29e"
+  },
+  {
+    "entry_id": 382,
+    "timestamp": "2026-05-22T02:49:16.132651+00:00",
+    "tool_name": "sandbox",
+    "action": "execute",
+    "inputs": {
+      "image": "python:3.11-slim",
+      "command": [
+        "python",
+        "test.py"
+      ],
+      "mounts": [
+        "/tmp/code:/code:ro"
+      ],
+      "timeout_seconds": 30,
+      "working_dir": null
+    },
+    "outputs": {
+      "exit_code": 0,
+      "duration_ms": 0
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "84afd797e34414b7d2e2c2c2306282129a4e768326b910d7e2fde9abd9d7f29e",
+    "current_hash": "839a78604c4dfe7439c0583834541a2d05241489c13379227a3d0476968a6a26"
+  },
+  {
+    "entry_id": 383,
+    "timestamp": "2026-05-22T02:49:16.229941+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp9lysahym",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "denied",
+    "error_message": "Permission denied: scan_repo",
+    "previous_hash": "839a78604c4dfe7439c0583834541a2d05241489c13379227a3d0476968a6a26",
+    "current_hash": "314b546a96ae2768c0dcd88bc6a8bb05d441f0ab96b6f233880b117d3eca580e"
+  },
+  {
+    "entry_id": 384,
+    "timestamp": "2026-05-22T02:49:16.246265+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp3vyjbkpu",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 0,
+      "ruleset_used": "auto"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "314b546a96ae2768c0dcd88bc6a8bb05d441f0ab96b6f233880b117d3eca580e",
+    "current_hash": "6b4ad3e51b9448f53cd2913864f224090bc0552c4e04fe313e33cb465ed009c4"
+  },
+  {
+    "entry_id": 385,
+    "timestamp": "2026-05-22T02:49:16.261803+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp7e0u3_2o",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 0,
+      "ruleset_used": "auto"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "6b4ad3e51b9448f53cd2913864f224090bc0552c4e04fe313e33cb465ed009c4",
+    "current_hash": "e57b8472222dbe47f76611677c6cec3608b069dabe635ec9b6223ea9cca851e3"
+  },
+  {
+    "entry_id": 386,
+    "timestamp": "2026-05-22T02:49:16.277494+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp7buta3o9",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 2,
+      "ruleset_used": "auto"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "e57b8472222dbe47f76611677c6cec3608b069dabe635ec9b6223ea9cca851e3",
+    "current_hash": "48775039ffebb6a08d76a9a6a1e372d1970cac7c6da2ec4f554ede6f0c2c0232"
+  },
+  {
+    "entry_id": 387,
+    "timestamp": "2026-05-22T02:49:16.293485+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpjp2gm_ho",
+      "ruleset": "p/security-audit",
+      "timeout_seconds": null
+    },
+    "outputs": {
+      "finding_count": 0,
+      "ruleset_used": "p/security-audit"
+    },
+    "status": "success",
+    "error_message": null,
+    "previous_hash": "48775039ffebb6a08d76a9a6a1e372d1970cac7c6da2ec4f554ede6f0c2c0232",
+    "current_hash": "4941691314e03a99fb644314535865d967c58325e9fd435a19813b99af779117"
+  },
+  {
+    "entry_id": 388,
+    "timestamp": "2026-05-22T02:49:16.313286+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpq4u7kkom",
+      "ruleset": "auto",
+      "timeout_seconds": 10
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Timeout after 10s",
+    "previous_hash": "4941691314e03a99fb644314535865d967c58325e9fd435a19813b99af779117",
+    "current_hash": "0d13b54f75bc9a402e57c2b4c01446f92d11e66d263fa314f4b2646edc59dd4f"
+  },
+  {
+    "entry_id": 389,
+    "timestamp": "2026-05-22T02:49:16.329034+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp4nw7ilhf",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "JSON parse error: Expecting value: line 1 column 1 (char 0)",
+    "previous_hash": "0d13b54f75bc9a402e57c2b4c01446f92d11e66d263fa314f4b2646edc59dd4f",
+    "current_hash": "1fbecfc42d2954e638df453463a8bf519a9c1c82084ba0b38afce570e23aee97"
+  },
+  {
+    "entry_id": 390,
+    "timestamp": "2026-05-22T02:49:16.341631+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmp4nw7ilhf",
+      "ruleset": "auto",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Semgrep output not valid JSON: Expecting value: line 1 column 1 (char 0)",
+    "previous_hash": "1fbecfc42d2954e638df453463a8bf519a9c1c82084ba0b38afce570e23aee97",
+    "current_hash": "1f224d3a66a91508798395eddddcb1629bafc482b3d67213c4cc8a98de304f41"
+  },
+  {
+    "entry_id": 391,
+    "timestamp": "2026-05-22T02:49:16.357302+00:00",
+    "tool_name": "semgrep",
+    "action": "scan",
+    "inputs": {
+      "repo_path": "/var/folders/0d/f69rk8_90ks4gnkjy15j_g9m0000gn/T/tmpfjju6dc9",
+      "ruleset": "invalid-ruleset",
+      "timeout_seconds": null
+    },
+    "outputs": {},
+    "status": "failure",
+    "error_message": "Input validation: 1 validation error for SemgrepInput\nruleset\n  Value error, Ruleset 'invalid-ruleset' not approved. Allowed: auto, p/c, p/cpp, p/owasp-top-ten, p/security-audit [type=value_error, input_value='invalid-ruleset', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/value_error",
+    "previous_hash": "1f224d3a66a91508798395eddddcb1629bafc482b3d67213c4cc8a98de304f41",
+    "current_hash": "99fd28f31e05d8854f8f407c91663158df3b4674d5b0043814132635fa38d1a5"
   }
 ]

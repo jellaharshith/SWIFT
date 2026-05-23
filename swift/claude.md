@@ -1,161 +1,141 @@
-# SWIFT: claude.md
+# SWIFT v8.0 -- architecture
 
-## WHY: The Problem We're Solving
+## Purpose
 
-Traditional penetration testing is slow (weeks), expensive ($50K+), and point-in-time. SWIFT closes the gap between automated scanner and real pentester — making red-team capabilities continuous and AI-powered.
+One AI-driven offensive-security tool that covers:
 
-## WHAT: What SWIFT Does
+* OWASP Top 10 web vulns (existing v7 Playwright + Sonnet probes)
+* Kali Linux toolchain (existing v7 `kali/` runners + new sandbox-daemon)
+* Multi-agent red-team kill chain (Decepticon-derived LangGraph layer)
+* Bug-bounty automation (claude-bug-bounty-derived skills + Python core)
 
-SWIFT is a Python red-team automation platform that:
+Every external action passes through one ROE gate (`security/roe.py`),
+one audit log (`log/audit.py`), and one finding shape
+(`agent/models.Vulnerability` / `ExploitChain`).
 
-1. **Recon** via OSINT (DNS, subdomain enum, GitHub dorks, Shodan, WHOIS)
-2. **Finds** security flaws via active probes (12 vuln types: SQLi, XSS, SSRF, IDOR, JWT, etc.)
-3. **Chains** findings into credential-reuse and multi-step attack sequences
-4. **Simulates** post-exploitation capability (data-exfil, persistence, C2 feasibility — sandboxed)
-5. **Reports** everything with ROE gate enforcement (JSON for APIs, Markdown for humans)
-
-## HOW: Build Architecture
-
-### Pipeline (OSINT → Active → Chain → Post-Exploit)
-
-1. **OSINT** (dns_recon, github_dorks, shodan, whois): Free recon, no active probes
-2. **Triage** (Haiku): Fast pattern matching, flags suspicious code (~50ms/file, $0.05)
-3. **Active probes** (Sonnet): Deep reasoning with 95% confidence gate (~3s/location)
-4. **Chain detection**: Credential-reuse + multi-step attack paths
-5. **Post-exploit sim**: Feasibility assessment, simulate-only, sandboxed behind ROE
-
-**Only output findings with confidence ≥ 95%.** This is non-negotiable.
-
-- Prevents false positives
-- Builds user trust
-- Guides all code decisions
-- If you see "confidence < 95", it goes to logs, not output
-
-### Stack
-
-- **Language:** Python 3.10+, strict PEP 8
-- **AI:** Claude Haiku (triage), Sonnet (analysis/probe generation)
-- **Isolation:** Docker (Kali container, privesc sandbox)
-- **CLI:** Click framework + argparse (swiftsec entry point)
-- **Format:** JSON output, Markdown reports
-- **Testing:** pytest, mock Claude API in unit tests
-- **Extra deps:** cryptography, httpx, dnspython, shodan, PyGithub
-
-## Progressive Disclosure: Finding What You Need
-
-### File Structure
+## Top-level layout
 
 ```
-swift/
-├── agent/              # Orchestration (scan_codebase, unified_orchestrator)
-├── cli/                # Commands (scan, redteam, osint, kali-scan, web-scan)
-├── config/             # .env loading, API key validation, ROE consent
-├── scanners/           # Haiku + Sonnet pipeline
-├── sandbox/            # Docker (Kali runner, privesc sandbox)
-├── triage/             # Pattern matching (cost optimization)
-├── output/             # JSON/Markdown formatters, unified report
-├── log/                # Structured logging
-├── test/               # Unit/integration tests
-└── swift_cli.py        # CLI entry point (swiftsec console script)
+/SWIFT/                       # repo root: README, LICENSE, NOTICE, top-level CLAUDE.md
+└── swift/                    # the installable Python package (`swiftsec`)
+    ├── swift_cli.py          # argparse entry point; v8 subcommands added via cli/v8.py
+    ├── pyproject.toml        # version 8.0.0; optional deps: langgraph, litellm, graph, graph-neo4j, tmux, web3, ...
+    ├── agent/                # SWIFT's existing orchestrator + new langgraph_layer/
+    │   ├── orchestrator.py   # Haiku -> Sonnet pipeline (unchanged)
+    │   ├── research_agent.py # Claude research loop (unchanged)
+    │   └── langgraph_layer/  # v8: 16 specialist agents, 10 sub-graphs
+    │       ├── specialists.py        # Decepticon agent prompts + tool wirings
+    │       ├── runtime.py            # Claude tool-use loop, ROE-gated
+    │       ├── graphs/__init__.py    # MiniGraph DAG runner (no langgraph dep required)
+    │       ├── middleware/__init__.py # engagement-context / OPPLAN / model-fallback
+    │       └── tools/__init__.py     # tool registry exposed to specialists
+    ├── llm/                  # v8: anthropic SDK default, LiteLLM optional
+    │   ├── client.py         # LLMClient.messages_create -- one interface, both backends
+    │   └── fallback.py       # Tier-based retry chain (HIGH / MID / LOW)
+    ├── graph/                # v8: attack knowledge graph
+    │   ├── kg.py             # AttackGraph protocol + open_kg()
+    │   ├── sqlite_kg.py      # default backend (NetworkX in-memory + SQLite persist)
+    │   └── neo4j_kg.py       # opt-in when NEO4J_URI is set
+    ├── sandbox/
+    │   ├── docker_runner.py  # existing
+    │   └── tmux_session.py   # v8: libtmux-based interactive sessions
+    ├── bounty/               # v8: claude-bug-bounty Python core
+    │   ├── hunt_memory.py    # cross-engagement audit/patterns/journal (10MB rotation)
+    │   ├── auth_session.py   # session-token propagation to httpx/katana/ffuf/nuclei
+    │   ├── validator.py      # 7-question + 4-gate validation
+    │   ├── report_formats.py # H1 / Bugcrowd / Intigriti / Immunefi
+    │   └── web3/             # slither, mythril, grep-arsenal patterns
+    ├── engagement/           # v8: Soundwave + OPPLAN + ConOps generation
+    ├── skills/               # v8: vendored swift-prefixed skills + slash commands
+    │   ├── agents/swift-*.md       # 8 agent skills
+    │   ├── commands/swift-*.md     # 23 slash commands
+    │   └── README.md
+    ├── security/
+    │   └── roe.py            # KNOWN_TECHNIQUES + load_roe + assert_* (v8 added: tmux_interactive,
+    │                         #   vuln_pipeline, engagement_planning, web3_audit, auth_chain,
+    │                         #   hunt_memory_read/write, langgraph_subagent)
+    ├── deploy/               # v8: optional docker-compose lab
+    │   ├── compose.yaml      # litellm + neo4j + postgres + sandbox-daemon
+    │   └── kali/Dockerfile   # Kali sandbox image with bundled tool surface
+    ├── cli/
+    │   └── v8.py             # the 11 new subcommands and their handlers
+    └── test/
+        └── unit/test_v8_*.py # 40 v8 unit tests (all passing)
 ```
 
-**Tip:** Each folder has a focused, single responsibility. Read `agent/` to understand the big picture, then drill into specific modules.
+## New CLI surface (v8 subcommands)
 
-### What Each Module Does (Quick Reference)
+| Subcommand            | What it does                                              | ROE technique(s) gated         |
+|-----------------------|-----------------------------------------------------------|--------------------------------|
+| `swiftsec engage`     | Soundwave interview -> `roe.yaml` + `OPPLAN.md` + `ConOps.md` | `engagement_planning`      |
+| `swiftsec redteam-full` | Decepticon kill chain via LangGraph layer               | `langgraph_subagent` + others |
+| `swiftsec vuln-pipeline` | 5-stage Scanner -> Detector -> Verifier -> Exploiter -> Patcher | `vuln_pipeline`          |
+| `swiftsec hunt`       | Bug-bounty hunt with hunt-memory + auth chaining          | `osint`, `active_scan`, `auth_chain` |
+| `swiftsec validate`   | 7-question + 4-gate validator                             | (read-only)                    |
+| `swiftsec autopilot`  | Hunt + validate + (optional) report, mode-gated           | composite                      |
+| `swiftsec bb-report`  | Render finding for H1 / Bugcrowd / Intigriti / Immunefi   | (read-only)                    |
+| `swiftsec web3-audit` | Slither + Mythril + grep-arsenal                          | `web3_audit`                   |
+| `swiftsec lab {up,down,status,graphs}` | docker-compose lab management            | (no ROE)                       |
+| `swiftsec skills {install,uninstall,list}` | Symlink swift/skills into ~/.claude/ | (no ROE)                       |
+| `swiftsec kg {export,neighbors,prune}` | Knowledge graph inspection                | (read-only)                    |
 
-Every decision flows from this. If something doesn't serve this rule, question it.
+The v7 surface (`scan`, `redteam`, `web-scan`, `research`, `kali-scan`, `osint`,
+`intel`, `chain`, `attack-sim`, `audit`, `plugin`, etc.) is unchanged.
 
-### Safety Guarantees (Sandbox)
+## How new modules plug in (the five-step contract)
 
-- No network access (--network=none)
-- Read-only filesystem (except /tmp)
-- CPU/memory limits (2 cores, 2GB)
-- 30-second timeout (kill if longer)
+1. Add a string to `security.roe.KNOWN_TECHNIQUES` and document it.
+2. Subclass `probes.base.Probe` (atomic) or define a node in
+   `agent/langgraph_layer/graphs/` (multi-step).
+3. Invoke external tools via `kali.runner.KaliRunner` (one-shot) or
+   `sandbox.tmux_session.TmuxSession` (interactive).
+4. Emit findings as `agent.models.Vulnerability` / `ExploitChain`.
+5. Audit-log every external action via `log.audit.log_step(...)`.
 
-## Coding Standards (Quick Checklist)
+## Default vs lab mode
 
-- ✅ Type hints on every function: `def scan(repo: str) -> List[Vulnerability]:`
-- ✅ Google-style docstrings (Args, Returns, Raises)
-- ✅ PEP 8: Run `black swift/` before commit
-- ✅ Comments explain "why", not "what"
-- ✅ Error messages are user-friendly
-- ✅ Test coverage >80%
-- ✅ No secrets in code (use .env)
+* **Default install (`pip install swiftsec`)** -- single-CLI, direct
+  Anthropic SDK, SQLite attack graph, no Docker required. Everything in
+  the v8 surface still works; advanced features just collapse to their
+  in-process equivalent.
+* **Lab mode (`swiftsec lab up`)** -- docker-compose brings up LiteLLM
+  (multi-provider routing), Neo4j (attack graph), Postgres, and a Kali
+  sandbox-daemon. Specialists auto-detect the lab via env (`LITELLM_BASE_URL`,
+  `NEO4J_URI`) and switch backends without code changes.
 
-## Testing Strategy
+## Optional dependency groups
 
-- **Unit tests:** Mock Claude API, test logic in isolation (pytest)
-- **Integration tests:** Test components together (use real API, gated by env var)
-- **E2E tests:** Full scan on real repo (SWIFT_RUN_E2E=1)
+`pip install 'swiftsec[<group>]'` where group is one of:
 
-Run tests: `pytest test/ -v --cov=swift`
+| Group        | Brings in                                                    |
+|--------------|--------------------------------------------------------------|
+| `langgraph`  | `langgraph`, `langchain`, `langchain-anthropic`, checkpoint  |
+| `litellm`    | `litellm` + `openai` for OpenAI-compat surface               |
+| `graph`      | `networkx`                                                   |
+| `graph-neo4j`| `neo4j` python driver                                        |
+| `tmux`       | `libtmux`                                                    |
+| `web3`       | `slither-analyzer`, `mythril`, `web3`                        |
+| `bounty`     | (no Python deps; install Go/Rust tools via `swift/skills/README.md`) |
+| `all`        | superset (excludes `graph-neo4j`)                            |
 
-## How to Use This File
+## Tests
 
-1. **When starting:** Read WHY, WHAT, HOW sections (5 min)
-2. **When building:** Refer to "What Each Module Does" table
-3. **When stuck:** Check "Critical Constraints" section
-4. **For details:** Each module has its own documentation (see file structure)
-5. **For implementation:** Read the specific module's file (e.g., `scanners/claude.md`)
+```sh
+cd swift && .venv/bin/python -m pytest test/unit/test_v8_*.py -q
+```
 
----
+40 v8 unit tests cover ROE registration, SQLite knowledge graph, hunt
+memory rotation, auth session propagation, the 7-question gate, the four
+report formatters, LLM tier fallback, the LangGraph runtime topology, the
+engagement workflow, web3 grep patterns, and CLI smoke for all 11 new
+subcommands. Integration tests for Neo4j and LiteLLM are gated by env
+vars (`NEO4J_URI`, `LITELLM_BASE_URL`).
 
-## Reading Next
+## Licenses & attribution
 
-- **To understand the pipeline:** Read `agent/claude.md`
-- **To find vulnerabilities:** Read `scanners/claude.md`
-- **To run Kali tools:** Read `kali/claude.md`
-- **To add CLI commands:** Read `cli/claude.md`
-- **To optimize cost:** Read `triage/claude.md`
-- **To verify correctness:** Read `test/claude.md`
+The merged work is MIT (see `LICENSE`). Two upstream sources are folded in:
 
-##Github
+* **Decepticon** -- Apache-2.0 (PurpleAILAB)
+* **claude-bug-bounty** -- MIT (shuvonsec)
 
-- refernce github.md files Read '/Users/harshithjella/SWIFT/swift/github.md', If there is update show as new feature create not as issue!
-
-##.env
-
-- Only use anthropic api for testing the gitrepo for client
-
-#Python writing python
-
-- use for every don't ask permission permission:granted source .venv/bin/activate
-
-#Choose this model according
-Task comes in:
-├─ Formatting, simple fix, single file
-│ └─> /model haiku
-├─ Standard coding, features, bugs, multi-file
-│ └─> /model sonnet (default)
-└─ System design, architecture, Sonnet hit limits
-└─> /model opus (rare)
-
-#TO-DO
-
-- REFERNCE TODO.md and start the task
-- If the stop the session during any task. Automitically update to TODO.md..if there are done!!
-
-#SKILLS
-
-- Use this skills all the time caveman,superpower, obsidian.
-- Store and refernce any obsidian markedown file here /Users/harshithjella/SWIFT/Obsidian - SWIFT
-
-#Sub-agents
-
-- Alaways to use sub-agents for tasks, use superpower skills
-
-#Session Ended
-
-- Whenever the one Session or Any task stopped due the usage or stopped by the user. I want you to use caveman skill and compress the whole context and update it TODO.md and Also whenever the one session or any task stopped due to the usage or stopped by the user Update TODO.md for upcoming tasks.
-
-#Context
-Generate a reusable context block for this project.
-Include:
-
-- Goal
-- Current state
-- What works
-- Problems
-- Next steps
-- Important decisions
-  Keep it clear and structured, use Context7 skill and save it in obsidian this folder{/Users/harshithjella/SWIFT/Obsidian - SWIFT/SWIFT/context} for every context use makedown file type
+Full attribution + per-file modifications: see `/SWIFT/NOTICE`.
