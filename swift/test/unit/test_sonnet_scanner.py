@@ -1,361 +1,106 @@
-import itertools
+"""Tests for SonnetAnalysisScanner — semgrep-backed, no Claude API."""
 import json
-import pytest
+import subprocess
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from scanners.sonnet_scanner import SonnetAnalysisScanner
 from agent.models import Vulnerability
 
 
-def _make_client(response_json: dict) -> MagicMock:
-    msg = MagicMock()
-    msg.content = [MagicMock(text=json.dumps(response_json))]
-    client = MagicMock()
-    client.messages.create.return_value = msg
-    return client
-
-
-VULN_97 = {
-    "confidence": 0.97,
-    "vuln_type": "sql_injection",
-    "description": "SQL injection via f-string",
-    "severity": "critical",
-    "code_snippet": "query = f'SELECT * FROM users WHERE id={uid}'",
-}
-
-VULN_94 = {**VULN_97, "confidence": 0.94}
-VULN_0 = {**VULN_97, "confidence": 0.0}
-
-
-def test_sonnet_returns_vulnerability_at_95():
-    client = _make_client(VULN_97)
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 10, "source code")
-    assert isinstance(result, Vulnerability)
-    assert result.confidence == 0.97
-
-
-def test_sonnet_returns_review_required_at_94():
-    # Confidence 0.94 is in the medium tier (0.65–0.95): returns REVIEW_REQUIRED, not None.
-    client = _make_client(VULN_94)
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 10, "source code")
-    assert isinstance(result, Vulnerability)
-    assert result.status == "REVIEW_REQUIRED"
-    assert result.confidence == 0.94
-
-
-def test_sonnet_returns_none_at_0():
-    client = _make_client(VULN_0)
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 10, "source code")
-    assert result is None
-
-
-def test_sonnet_medium_confidence_is_logged():
-    # Medium confidence (0.94) logs at INFO level, not WARNING.
-    # WARNING is reserved for truly low confidence (< REVIEW_THRESHOLD = 0.65).
-    client = _make_client(VULN_94)
-    scanner = SonnetAnalysisScanner(client=client)
-    with patch("scanners.sonnet_scanner.logger") as mock_log:
-        scanner.analyze_line("app.py", 10, "source code")
-        mock_log.info.assert_called()
-
-
-def test_sonnet_returns_none_below_review_threshold():
-    # Confidence below 0.65 (REVIEW_THRESHOLD) is suppressed entirely.
-    vuln_low = {**VULN_97, "confidence": 0.5}
-    client = _make_client(vuln_low)
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 10, "source code")
-    assert result is None
-
-
-def test_sonnet_low_confidence_warning_is_logged():
-    # Confidence below REVIEW_THRESHOLD (0.65) must emit a WARNING.
-    vuln_low = {**VULN_97, "confidence": 0.5}
-    client = _make_client(vuln_low)
-    scanner = SonnetAnalysisScanner(client=client)
-    with patch("scanners.sonnet_scanner.logger") as mock_log:
-        scanner.analyze_line("app.py", 10, "source code")
-        mock_log.warning.assert_called_once()
-
-
-def test_sonnet_calls_correct_model():
-    client = _make_client(VULN_97)
-    scanner = SonnetAnalysisScanner(client=client)
-    scanner.analyze_line("app.py", 10, "source")
-    call_kwargs = client.messages.create.call_args[1]
-    assert call_kwargs["model"] == "claude-sonnet-4-6"
-
-
-def test_sonnet_vulnerability_id_increments():
-    client1 = _make_client(VULN_97)
-    client2 = _make_client(VULN_97)
-    # Reset counter for test isolation
-    SonnetAnalysisScanner._counter = itertools.count(1)
-    s1 = SonnetAnalysisScanner(client=client1)
-    s2 = SonnetAnalysisScanner(client=client2)
-    v1 = s1.analyze_line("app.py", 1, "src")
-    v2 = s2.analyze_line("app.py", 2, "src")
-    assert v1.id == "SWIFT-001"
-    assert v2.id == "SWIFT-002"
-
-
-def test_sonnet_invalid_json_returns_none():
-    msg = MagicMock()
-    msg.content = [MagicMock(text="not valid json at all")]
-    client = MagicMock()
-    client.messages.create.return_value = msg
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 10, "source")
-    assert result is None
-
-
-def test_sonnet_missing_confidence_field_returns_none():
-    client = _make_client({"vuln_type": "sql_injection", "description": "x"})
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 10, "source")
-    assert result is None
-
-
-def test_sonnet_severity_normalized():
-    client = _make_client(VULN_97)
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 10, "source")
-    assert result.severity == "CRITICAL"
-
-
-def test_sonnet_extracts_evidence_fields():
-    """Test that Sonnet extracts all evidence bundle fields."""
-    client = _make_client({
-        "confidence": 0.97,
-        "vuln_type": "sql_injection",
-        "description": "SQL injection via f-string",
-        "severity": "critical",
-        "code_snippet": "query = f'SELECT * FROM users WHERE id={uid}'",
-        "cwe_id": "CWE-89",
-        "cwe_url": "https://cwe.mitre.org/data/definitions/89.html",
-        "owasp_category": "A03:2021 – Injection",
-        "exploit_description": "An attacker can modify SQL queries by injecting malicious input through the 'uid' parameter",
-        "exploit_impact": "Data exfiltration, unauthorized access to user accounts, data modification or deletion",
-        "remediation": "Use parameterized queries instead of f-strings. Replace f'SELECT...' with a prepared statement.",
-        "remediation_code": "cursor.execute('SELECT * FROM users WHERE id = %s', (uid,))",
-        "remediation_effort": "LOW",
-        "remediation_time_minutes": 10,
-        "references": [
-            "https://owasp.org/Top10/A03_2021-Injection/",
-            "https://cwe.mitre.org/data/definitions/89.html",
-        ]
+def _semgrep_result(line: int, rule_id: str = "python.lang.security.sql-injection",
+                    severity: str = "ERROR", cwe: str = "CWE-89") -> str:
+    return json.dumps({
+        "results": [{
+            "check_id": rule_id,
+            "path": "app.py",
+            "start": {"line": line, "col": 1},
+            "end": {"line": line, "col": 20},
+            "extra": {
+                "severity": severity,
+                "message": "SQL injection detected",
+                "metadata": {
+                    "cwe": [cwe],
+                    "owasp": "A03:2021 – Injection",
+                    "references": ["https://owasp.org/Top10/A03_2021-Injection/"],
+                },
+            },
+        }],
+        "errors": [],
     })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 5, "source")
-
-    assert result is not None
-    assert result.cwe_id == "CWE-89"
-    assert result.cwe_url == "https://cwe.mitre.org/data/definitions/89.html"
-    assert result.owasp_category == "A03:2021 – Injection"
-    assert result.exploit_description == "An attacker can modify SQL queries by injecting malicious input through the 'uid' parameter"
-    assert result.exploit_impact == "Data exfiltration, unauthorized access to user accounts, data modification or deletion"
-    assert result.remediation == "Use parameterized queries instead of f-strings. Replace f'SELECT...' with a prepared statement."
-    assert result.remediation_code == "cursor.execute('SELECT * FROM users WHERE id = %s', (uid,))"
-    assert result.remediation_effort == "LOW"
-    assert result.remediation_time_minutes == 10
-    assert result.references == [
-        "https://owasp.org/Top10/A03_2021-Injection/",
-        "https://cwe.mitre.org/data/definitions/89.html",
-    ]
 
 
-def test_sonnet_maps_cwe_to_owasp():
-    """Test that CWE to OWASP mapping is correctly extracted."""
-    cwe_owasp_mapping = {
-        "CWE-89": "A03:2021 – Injection",
-        "CWE-502": "A08:2021 – Software and Data Integrity Failures",
-        "CWE-798": "A07:2021 – Identification and Authentication Failures",
-        "CWE-327": "A02:2021 – Cryptographic Failures",
-    }
-
-    for cwe_id, owasp_cat in cwe_owasp_mapping.items():
-        client = _make_client({
-            "confidence": 0.96,
-            "vuln_type": "unknown",
-            "description": f"Vulnerability {cwe_id}",
-            "severity": "high",
-            "code_snippet": "code",
-            "cwe_id": cwe_id,
-            "owasp_category": owasp_cat,
-            "exploit_description": "test",
-            "exploit_impact": "test",
-            "remediation": "test",
-            "remediation_code": "test",
-            "remediation_effort": "MEDIUM",
-            "remediation_time_minutes": 30,
-            "references": []
-        })
-        scanner = SonnetAnalysisScanner(client=client)
-        result = scanner.analyze_line("app.py", 1, "src")
-
-        assert result is not None
-        assert result.cwe_id == cwe_id
-        assert result.owasp_category == owasp_cat
+def _mock_run(stdout: str, returncode: int = 1):
+    m = MagicMock()
+    m.returncode = returncode
+    m.stdout = stdout
+    m.stderr = ""
+    return m
 
 
-def test_sonnet_generates_remediation_code():
-    """Test that remediation code is correctly extracted and formatted."""
-    vulnerable_code = "query = f'SELECT * FROM users WHERE id={uid}'"
-    remediated_code = "cursor.execute('SELECT * FROM users WHERE id = %s', (uid,))"
+# ------------------------------------------------------------------
 
-    client = _make_client({
-        "confidence": 0.99,
-        "vuln_type": "sql_injection",
-        "description": "SQL injection via f-string",
-        "severity": "critical",
-        "code_snippet": vulnerable_code,
-        "cwe_id": "CWE-89",
-        "cwe_url": "https://cwe.mitre.org/data/definitions/89.html",
-        "owasp_category": "A03:2021 – Injection",
-        "exploit_description": "Attacker can inject SQL code",
-        "exploit_impact": "Full database compromise",
-        "remediation": "Use parameterized queries",
-        "remediation_code": remediated_code,
-        "remediation_effort": "LOW",
-        "remediation_time_minutes": 5,
-        "references": ["https://cwe.mitre.org/data/definitions/89.html"]
-    })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 15, "source")
-
-    assert result is not None
-    assert result.remediation_code == remediated_code
-    assert result.remediation_effort == "LOW"
-    assert result.remediation_time_minutes == 5
-    assert result.code_snippet == vulnerable_code
+def test_analyze_line_returns_vulnerability_from_semgrep():
+    scanner = SonnetAnalysisScanner()
+    with patch("subprocess.run", return_value=_mock_run(_semgrep_result(5))):
+        vuln = scanner.analyze_line("app.py", 5, "x = query(uid)\n")
+    assert vuln is not None
+    assert isinstance(vuln, Vulnerability)
+    assert vuln.file_path == "app.py"
+    assert vuln.line_number == 5
 
 
-def test_sonnet_handles_missing_evidence_fields():
-    """Test that missing evidence fields are handled gracefully."""
-    client = _make_client({
-        "confidence": 0.97,
-        "vuln_type": "sql_injection",
-        "description": "SQL injection",
-        "severity": "high",
-        "code_snippet": "code",
-        # Missing all evidence fields
-    })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 5, "source")
-
-    assert result is not None
-    assert result.cwe_id is None
-    assert result.cwe_url is None
-    assert result.owasp_category is None
-    assert result.exploit_description is None
-    assert result.exploit_impact is None
-    assert result.remediation is None
-    assert result.remediation_code is None
-    assert result.remediation_effort is None
-    assert result.remediation_time_minutes is None
-    assert result.references == []
+def test_analyze_line_sets_owasp_category():
+    scanner = SonnetAnalysisScanner()
+    with patch("subprocess.run", return_value=_mock_run(_semgrep_result(3))):
+        vuln = scanner.analyze_line("app.py", 3, "code\n")
+    assert vuln.owasp_category == "A03:2021 – Injection"
 
 
-def test_sonnet_parses_remediation_time_as_integer():
-    """Test that remediation_time_minutes is correctly parsed as integer."""
-    client = _make_client({
-        "confidence": 0.96,
-        "vuln_type": "weak_crypto",
-        "description": "Weak encryption",
-        "severity": "high",
-        "code_snippet": "code",
-        "remediation_time_minutes": 25,  # Should be integer
-        "references": []
-    })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 5, "source")
-
-    assert result is not None
-    assert isinstance(result.remediation_time_minutes, int)
-    assert result.remediation_time_minutes == 25
+def test_analyze_line_maps_cwe():
+    scanner = SonnetAnalysisScanner()
+    with patch("subprocess.run", return_value=_mock_run(_semgrep_result(1))):
+        vuln = scanner.analyze_line("app.py", 1, "code\n")
+    assert vuln.cwe_id == "CWE-89"
+    assert "89" in (vuln.cwe_url or "")
 
 
-def test_sonnet_handles_invalid_remediation_time():
-    """Test that invalid remediation_time_minutes is handled gracefully."""
-    client = _make_client({
-        "confidence": 0.96,
-        "vuln_type": "weak_crypto",
-        "description": "Weak encryption",
-        "severity": "high",
-        "code_snippet": "code",
-        "remediation_time_minutes": "not_a_number",  # Invalid
-        "references": []
-    })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 5, "source")
-
-    assert result is not None
-    assert result.remediation_time_minutes is None
+def test_analyze_line_severity_mapping():
+    scanner = SonnetAnalysisScanner()
+    with patch("subprocess.run", return_value=_mock_run(_semgrep_result(1, severity="ERROR"))):
+        vuln = scanner.analyze_line("app.py", 1, "code\n")
+    assert vuln.severity == "HIGH"
 
 
-def test_sonnet_parses_references_list():
-    """Test that references are correctly parsed as a list."""
-    refs = [
-        "https://owasp.org/Top10/A03_2021-Injection/",
-        "https://cwe.mitre.org/data/definitions/89.html",
-        "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
-    ]
-    client = _make_client({
-        "confidence": 0.95,
-        "vuln_type": "sql_injection",
-        "description": "SQL injection",
-        "severity": "critical",
-        "code_snippet": "code",
-        "references": refs
-    })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 5, "source")
-
-    assert result is not None
-    assert result.references == refs
-    assert len(result.references) == 3
+def test_analyze_line_no_semgrep_returns_signal():
+    scanner = SonnetAnalysisScanner()
+    with patch("subprocess.run", side_effect=FileNotFoundError):
+        vuln = scanner.analyze_line("app.py", 7, "code\n")
+    assert vuln is not None
+    assert vuln.status == "REVIEW_REQUIRED"
+    assert vuln.vuln_type == "signal_requires_review"
 
 
-def test_sonnet_handles_null_references():
-    """Test that null references are converted to empty list."""
-    client = _make_client({
-        "confidence": 0.95,
-        "vuln_type": "sql_injection",
-        "description": "SQL injection",
-        "severity": "critical",
-        "code_snippet": "code",
-        "references": None
-    })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 5, "source")
-
-    assert result is not None
-    assert result.references == []
+def test_analyze_line_unmatched_line_returns_signal():
+    scanner = SonnetAnalysisScanner()
+    with patch("subprocess.run", return_value=_mock_run(_semgrep_result(10))):
+        vuln = scanner.analyze_line("app.py", 99, "code\n")
+    assert vuln.vuln_type == "signal_requires_review"
 
 
-def test_sonnet_confidence_gate_still_enforced():
-    """Test the three-tier confidence model with all evidence fields populated.
+def test_results_cached_per_file():
+    scanner = SonnetAnalysisScanner()
+    mock_run = MagicMock(return_value=_mock_run(_semgrep_result(1)))
+    with patch("subprocess.run", mock_run):
+        scanner.analyze_line("app.py", 1, "code\n")
+        scanner.analyze_line("app.py", 1, "code\n")
+    assert mock_run.call_count == 1
 
-    0.94 is medium confidence (REVIEW_REQUIRED), not suppressed.
-    Only confidence < REVIEW_THRESHOLD (0.65) returns None.
-    """
-    client = _make_client({
-        "confidence": 0.94,  # Medium tier: 0.65 ≤ 0.94 < 0.95
-        "vuln_type": "sql_injection",
-        "description": "SQL injection",
-        "severity": "critical",
-        "code_snippet": "code",
-        "cwe_id": "CWE-89",
-        "cwe_url": "https://cwe.mitre.org/data/definitions/89.html",
-        "owasp_category": "A03:2021 – Injection",
-        "remediation": "Use parameterized queries",
-        "references": []
-    })
-    scanner = SonnetAnalysisScanner(client=client)
-    result = scanner.analyze_line("app.py", 5, "source")
 
-    assert result is not None
-    assert result.status == "REVIEW_REQUIRED"
-    assert result.confidence == 0.94
+def test_client_kwarg_ignored():
+    fake_client = MagicMock()
+    scanner = SonnetAnalysisScanner(client=fake_client)
+    with patch("subprocess.run", return_value=_mock_run(_semgrep_result(1))):
+        scanner.analyze_line("app.py", 1, "code\n")
+    fake_client.messages.create.assert_not_called()

@@ -13,26 +13,21 @@ class Config:
     """SWIFT runtime configuration.
 
     Attributes:
-        api_key: Anthropic API key for Claude model access.
         confidence_threshold: Minimum confidence to report a finding (default 0.95).
         sandbox_timeout: Docker sandbox execution timeout in seconds (default 30).
-        max_retries: Maximum API retry attempts on transient failures (default 3).
+        max_retries: Maximum retry attempts on transient failures (default 3).
         log_level: Python logging level string (default INFO).
-        haiku_model: Claude Haiku model ID for triage scanning.
-        sonnet_model: Claude Sonnet model ID for deep analysis and patching.
         kali_image_tag: Kali Linux Docker image tag for offensive scanning.
         nvd_api_key: NVD API key for higher rate limits (optional).
         cve_poll_interval: Seconds between live CVE API polls (default 2).
         kali_container_timeout: Seconds before killing Kali scan container (default 300).
+        semgrep_timeout: Per-file semgrep timeout in seconds (default 30).
     """
 
-    api_key: str
     confidence_threshold: float = 0.95
     sandbox_timeout: int = 30
     max_retries: int = 3
     log_level: str = "INFO"
-    haiku_model: str = "claude-haiku-4-5-20251001"
-    sonnet_model: str = "claude-sonnet-4-6"
     kali_image_tag: str = "swift-kali:latest"
     nvd_api_key: str = ""
     cve_poll_interval: int = 2
@@ -40,8 +35,7 @@ class Config:
     intel_db_path: str = ""
     intel_sync_interval_hours: int = 24
     github_token: str = ""
-    openai_api_key: str = ""
-    gemini_api_key: str = ""
+    semgrep_timeout: int = 30
 
 
 _config: Optional[Config] = None
@@ -54,20 +48,13 @@ def get_config() -> Config:
         A fully-validated Config instance.
 
     Raises:
-        ValueError: If ANTHROPIC_API_KEY is missing or confidence_threshold
-            is outside [0.0, 1.0].
+        ValueError: If confidence_threshold is outside [0.0, 1.0].
     """
     global _config
     if _config is not None:
         return _config
 
     load_dotenv()
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY not set. Add it to .env or environment."
-        )
 
     threshold = float(os.environ.get("SWIFT_CONFIDENCE_THRESHOLD", "0.95"))
     if not 0.0 <= threshold <= 1.0:
@@ -76,7 +63,6 @@ def get_config() -> Config:
         )
 
     _config = Config(
-        api_key=api_key,
         confidence_threshold=threshold,
         sandbox_timeout=int(os.environ.get("SWIFT_SANDBOX_TIMEOUT", "30")),
         max_retries=int(os.environ.get("SWIFT_MAX_RETRIES", "3")),
@@ -88,8 +74,7 @@ def get_config() -> Config:
         intel_db_path=os.environ.get("INTEL_DB_PATH", ""),
         intel_sync_interval_hours=int(os.environ.get("INTEL_SYNC_INTERVAL_HOURS", "24")),
         github_token=os.environ.get("GITHUB_TOKEN", ""),
-        openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
-        gemini_api_key=os.environ.get("GEMINI_API_KEY", ""),
+        semgrep_timeout=int(os.environ.get("SWIFT_SEMGREP_TIMEOUT", "30")),
     )
     return _config
 

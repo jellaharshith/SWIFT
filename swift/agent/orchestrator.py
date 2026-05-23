@@ -9,8 +9,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
-import anthropic
-
 from agent.models import ScanResult, Vulnerability
 from agent.vuln_chain_auditor import VulnerabilityChainAuditor
 from chains.detector import ExploitChainDetector
@@ -72,12 +70,13 @@ def scan_codebase(
     scan_id = f"SCAN-{uuid.uuid4().hex[:8]}"
     metrics.start_scan(scan_id, repo_path)
 
-    client = anthropic.Anthropic(api_key=config.api_key)
     haiku = HaikuTriageScanner(
-        client, model=config.haiku_model, max_retries=config.max_retries, mode=mode
+        max_retries=config.max_retries,
+        mode=mode,
+        semgrep_timeout=config.semgrep_timeout,
     )
-    sonnet = SonnetAnalysisScanner(client, model=config.sonnet_model, mode=mode)
-    chain_detector = ExploitChainDetector(client, model=config.sonnet_model)
+    sonnet = SonnetAnalysisScanner(mode=mode, semgrep_timeout=config.semgrep_timeout)
+    chain_detector = ExploitChainDetector()
     chain_auditor = VulnerabilityChainAuditor()
 
     log_step("pentester.persona.activated", mode=mode, repo=str(repo_path))

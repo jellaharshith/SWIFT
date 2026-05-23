@@ -118,141 +118,39 @@ If no chains exist, return: []
 
 
 class ExploitChainDetector:
-    """LLM-based exploit chain summarisation.
+    """Deterministic exploit chain detector.
 
-    The primary method is enhance_chains(), which takes pre-built ExploitChain
-    objects from VulnerabilityChainAuditor and uses the LLM to improve their
-    narrative quality. On any failure it returns the originals unchanged.
-
-    detect_chains() is preserved for backward compatibility; it now hard-caps
-    its input to MAX_FINDINGS_FOR_CHAINING findings before calling the API to
-    prevent the oversized-prompt / invalid-JSON / OOM class of failures.
+    LLM enhancement removed — no API key required. enhance_chains() returns
+    the pre-built chains from VulnerabilityChainAuditor unchanged.
+    detect_chains() is kept for backward compatibility and returns an empty
+    list; callers should use VulnerabilityChainAuditor directly.
 
     Args:
-        client: Anthropic client instance.
-        model:  Sonnet model ID.
+        client: Ignored (kept for import compatibility).
+        model:  Ignored.
     """
 
-    MODEL = "claude-sonnet-4-6"
     CONFIDENCE_THRESHOLD = 0.85
     _counter: itertools.count = itertools.count(1)
 
-    def __init__(self, client: Any, model: str = MODEL) -> None:
-        self._client = client
-        self._model = model
+    def __init__(self, client: Any = None, model: str = "") -> None:
+        pass  # no LLM client needed
 
     # ------------------------------------------------------------------
     # Primary: LLM-enhanced summarisation of pre-built chains  (Task 7)
     # ------------------------------------------------------------------
 
     def enhance_chains(self, chains: List[ExploitChain]) -> List[ExploitChain]:
-        """Use the LLM to improve narrative of pre-built chains.
-
-        Guarantees:
-        - At most MAX_RANKED_CHAINS chains are sent to the model.
-        - Input JSON is truncated to MAX_MODEL_CHAIN_INPUT_CHARS.
-        - Response validated with json.loads; on failure returns originals.
-        - Memory guard before API call.
-        - Timeout protection (MAX_CHAIN_DETECTION_TIME seconds).
-        - Never crashes — always returns a valid list.
+        """Return chains unchanged — LLM enhancement disabled.
 
         Args:
             chains: Pre-ranked ExploitChain objects from VulnerabilityChainAuditor.
 
         Returns:
-            Enhanced chain list if LLM response is valid, else original chains.
+            The same chains list unmodified.
         """
-        if not chains:
-            return []
-
-        start = time.monotonic()
-
-        # Cap number of chains sent to model
-        chains_to_send = chains[:MAX_RANKED_CHAINS]
-        if len(chains) > MAX_RANKED_CHAINS:
-            logger.info(
-                "[CHAIN-LLM] Sending top %d of %d chains to LLM (others kept as-is)",
-                MAX_RANKED_CHAINS, len(chains),
-            )
-
-        # Serialise to compact JSON and enforce character limit
-        try:
-            chains_json = json.dumps(
-                [self._chain_to_compact_dict(c) for c in chains_to_send],
-                indent=2,
-            )
-        except Exception as exc:
-            logger.warning("[CHAIN-LLM] Serialisation failed: %s; keeping deterministic chains", exc)
-            return chains
-
-        if len(chains_json) > MAX_MODEL_CHAIN_INPUT_CHARS:
-            logger.info(
-                "[CHAIN-LLM] Input JSON (%d chars) exceeds MAX_MODEL_CHAIN_INPUT_CHARS=%d; "
-                "keeping deterministic chains",
-                len(chains_json), MAX_MODEL_CHAIN_INPUT_CHARS,
-            )
-            return chains
-
-        # Memory guard before API call
-        if not _is_memory_safe("pre-llm-chain-call"):
-            logger.warning("[CHAIN-LLM] Memory threshold exceeded; keeping deterministic chains")
-            return chains
-
-        prompt = _ENHANCE_PROMPT_TEMPLATE.format(chains_json=chains_json)
-
-        try:
-            elapsed = time.monotonic() - start
-            if elapsed > MAX_CHAIN_DETECTION_TIME:
-                logger.warning("[CHAIN-LLM] Pre-call timeout (%.1fs); keeping deterministic chains", elapsed)
-                return chains
-
-            raw = self._call_api(prompt)
-
-            elapsed = time.monotonic() - start
-            if elapsed > MAX_CHAIN_DETECTION_TIME:
-                logger.warning("[CHAIN-LLM] Post-call timeout (%.1fs); keeping deterministic chains", elapsed)
-                return chains
-
-        except Exception as exc:
-            logger.warning("[CHAIN-LLM] API call failed (%.1fs): %s; keeping deterministic chains",
-                           time.monotonic() - start, exc)
-            return chains
-
-        # Memory guard after API call
-        if not _is_memory_safe("post-llm-chain-call"):
-            logger.warning("[CHAIN-LLM] Memory threshold after API call; keeping deterministic chains")
-            return chains
-
-        # Strict JSON validation (Task 7)
-        try:
-            data = json.loads(raw.strip()) if raw and raw.strip() else None
-        except (json.JSONDecodeError, ValueError) as exc:
-            logger.warning(
-                "[CHAIN-LLM] model_output_invalid: JSON parse failed (%s); "
-                "using deterministic chains unchanged",
-                exc,
-            )
-            return chains
-
-        if not isinstance(data, list):
-            logger.warning(
-                "[CHAIN-LLM] model_output_invalid: expected JSON array, got %s; "
-                "using deterministic chains unchanged",
-                type(data).__name__,
-            )
-            return chains
-
-        if not data:
-            # Empty array is valid — model found nothing to enhance; keep originals
-            logger.info("[CHAIN-LLM] Model returned empty array; keeping deterministic chains")
-            return chains
-
-        enhanced = self._parse_enhanced_chains(data, chains)
-        logger.info(
-            "[CHAIN-LLM] Enhancement complete: %d/%d chains updated (%.1fs)",
-            len(enhanced), len(chains), time.monotonic() - start,
-        )
-        return enhanced
+        logger.debug("[CHAIN] LLM enhancement disabled; returning %d deterministic chains", len(chains))
+        return chains
 
     # ------------------------------------------------------------------
     # Backward-compat: detect_chains from raw findings
@@ -269,106 +167,25 @@ class ExploitChainDetector:
         Kept for backward compatibility. Now hard-caps input to prevent
         oversized prompts, and validates JSON strictly.
 
-        Prefer enhance_chains() for new call sites — it receives pre-built
-        chains from VulnerabilityChainAuditor and only asks the LLM to
-        improve narrative, not to generate chains from scratch.
+        Prefer VulnerabilityChainAuditor for new call sites — it builds
+        chains deterministically without any LLM.
 
         Returns:
-            List of ExploitChain objects with confidence >= CONFIDENCE_THRESHOLD.
-            Empty list on any error, timeout, or insufficient input.
+            Empty list — LLM-based chain detection disabled.
+            Use VulnerabilityChainAuditor.audit() instead.
         """
-        MAX_TRIAGE_FINDINGS = 50  # inlined after triage module deletion
-
-        if len(vulnerabilities) < 2:
-            logger.debug("[CHAIN-DETECT] Too few vulnerabilities (%d < 2)", len(vulnerabilities))
-            return []
-
-        # Hard cap: never send more than MAX_TRIAGE_FINDINGS findings to model
-        capped = vulnerabilities[:MAX_TRIAGE_FINDINGS]
-        if len(vulnerabilities) > MAX_TRIAGE_FINDINGS:
-            logger.info(
-                "[CHAIN-DETECT] Capped from %d to %d findings before LLM call",
-                len(vulnerabilities), MAX_TRIAGE_FINDINGS,
-            )
-
-        start = time.monotonic()
-
-        try:
-            vulns_json = json.dumps(
-                [
-                    {
-                        "id": v.id,
-                        "file_path": v.file_path,
-                        "line_number": v.line_number,
-                        "vuln_type": v.vuln_type,
-                        "description": v.description,
-                        "severity": v.severity,
-                    }
-                    for v in capped
-                ],
-                indent=2,
-            )
-        except Exception as exc:
-            logger.warning("[CHAIN-DETECT] Serialisation failed: %s", exc)
-            return []
-
-        # Enforce character limit
-        if len(vulns_json) > MAX_MODEL_CHAIN_INPUT_CHARS:
-            logger.warning(
-                "[CHAIN-DETECT] Input JSON (%d chars) exceeds limit=%d; skipping LLM call",
-                len(vulns_json), MAX_MODEL_CHAIN_INPUT_CHARS,
-            )
-            return []
-
-        prompt = _LEGACY_PROMPT_TEMPLATE.format(vulns_json=vulns_json)
-
-        try:
-            if time.monotonic() - start > MAX_CHAIN_DETECTION_TIME:
-                logger.warning("[CHAIN-DETECT] Pre-call timeout; skipping")
-                return []
-
-            if not _is_memory_safe("pre-detect-chains-llm"):
-                logger.warning("[CHAIN-DETECT] Memory threshold; skipping LLM call")
-                return []
-
-            raw = self._call_api(prompt)
-            elapsed = time.monotonic() - start
-
-            if elapsed > MAX_CHAIN_DETECTION_TIME:
-                logger.warning("[CHAIN-DETECT] Post-call timeout (%.1fs); skipping", elapsed)
-                return []
-
-            if not raw or not raw.strip():
-                logger.warning("[CHAIN-DETECT] Empty LLM response")
-                return []
-
-            chains = self._parse_legacy_response(raw)
-            logger.info("[CHAIN-DETECT] Detected %d chains (%.1fs)", len(chains), elapsed)
-
-            # Attach executor results if ROE permits chain execution
-            chains = self._maybe_execute_top_chain(chains, chain_executor=chain_executor, roe=roe)
-            return chains
-
-        except Exception as exc:
-            logger.warning("[CHAIN-DETECT] Failed after %.1fs: %s", time.monotonic() - start, exc)
-            return []
+        logger.debug(
+            "[CHAIN-DETECT] LLM chain detection disabled; use VulnerabilityChainAuditor"
+        )
+        return []
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _call_api(self, prompt: str) -> str:
-        """Call the configured Claude model and return the text response."""
-        response = self._client.messages.create(
-            model=self._model,
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text
-
     @staticmethod
     def _chain_to_compact_dict(chain: ExploitChain) -> dict:
-        """Serialise an ExploitChain to a compact dict for LLM input."""
+        """Serialise an ExploitChain to a compact dict."""
         return {
             "chain_id": chain.chain_id,
             "name": chain.name,

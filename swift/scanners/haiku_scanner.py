@@ -1,104 +1,109 @@
-"""Stage 1 API scanner using Claude Haiku for fast triage."""
+"""Stage 1 scanner: Semgrep OWASP rules replace Claude Haiku API calls."""
 from __future__ import annotations
 
-import re
-import time
+import json
+import subprocess
 from typing import Any, Optional, Set
-
-from agent.pentester_persona import build_haiku_pentester_prompt
 
 
 class HaikuTriageScanner:
-    """Call Haiku to identify suspicious line numbers from pre-flagged code.
+    """Semgrep-based triage scanner.
+
+    Replaces the former Claude Haiku API stage. No API key required.
+    Runs semgrep with OWASP Top 10 + CWE Top 25 + secrets rulesets.
+    Falls back to returning all regex-flagged lines if semgrep is not
+    installed or times out.
 
     Args:
-        client: Anthropic client instance. Injected for testability.
-        model: Haiku model ID (default: claude-haiku-4-5-20251001).
-        max_retries: Number of retry attempts on API error (default: 3).
-        mode: Scan persona — "pentester" (default) uses offensive framing;
-            "passive" uses the original defensive reviewer framing.
+        client: Ignored (kept for import compatibility with orchestrator).
+        model:  Ignored.
+        max_retries: Ignored.
+        mode:   Scan persona (informational only).
+        semgrep_timeout: Per-file semgrep timeout in seconds (default 30).
     """
 
-    MODEL = "claude-haiku-4-5-20251001"
+    _SEMGREP_CONFIGS = [
+        "p/owasp-top-ten",
+        "p/cwe-top-25",
+        "p/secrets",
+    ]
 
     def __init__(
         self,
-        client: Any,
-        model: str = MODEL,
+        client: Any = None,
+        model: str = "",
         max_retries: int = 3,
         mode: str = "pentester",
+        semgrep_timeout: int = 30,
+        **_kwargs: Any,
     ) -> None:
-        self._client = client
-        self._model = model
-        self._max_retries = max_retries
         self._mode = mode
+        self._timeout = semgrep_timeout
+        self._cache: dict[str, set[int]] = {}
 
     def scan_lines(
         self, file_path: str, source_code: str, flagged_lines: Set[int]
     ) -> Set[int]:
-        """Ask Haiku which flagged lines are suspicious.
+        """Return suspicious line numbers using semgrep.
+
+        Unions semgrep findings with regex-flagged lines so nothing is lost
+        when semgrep is unavailable or returns an empty set.
 
         Args:
-            file_path: Path shown in prompt for context.
-            source_code: Full file content.
-            flagged_lines: Line numbers pre-flagged by regex triage.
+            file_path: Path to the file on disk (semgrep reads it directly).
+            source_code: File content (unused; kept for interface compat).
+            flagged_lines: Lines pre-flagged by regex triage.
 
         Returns:
-            Set of line numbers Haiku considers suspicious.
-
-        Raises:
-            Exception: After max_retries failed attempts.
+            Union of semgrep-detected lines and regex-flagged lines.
         """
-        prompt = self._build_prompt(file_path, source_code, flagged_lines)
-        response_text = self._call_with_retry(prompt)
-        return self._parse_line_numbers(response_text)
+        if file_path not in self._cache:
+            self._cache[file_path] = self._run_semgrep(file_path)
 
-    def _build_prompt(
-        self, file_path: str, source_code: str, flagged_lines: Set[int]
-    ) -> str:
-        import os as _os
-        ext = _os.path.splitext(file_path)[1].lower()
-        lang = {
-            ".py": "python", ".ts": "typescript", ".tsx": "typescript",
-            ".js": "javascript", ".jsx": "javascript",
-        }.get(ext, "code")
-        if self._mode != "passive":
-            return build_haiku_pentester_prompt(
-                file_path=file_path,
-                source_code=source_code,
-                flagged_lines=sorted(flagged_lines),
-                lang=lang,
+        semgrep_lines = self._cache[file_path]
+        # Always union: if semgrep finds nothing, regex flags still surface.
+        return semgrep_lines | set(flagged_lines)
+
+    def _run_semgrep(self, file_path: str) -> set[int]:
+        """Run semgrep and return the set of flagged line numbers."""
+        cmd = [
+            "semgrep",
+            "--json",
+            "--quiet",
+            "--no-git-ignore",
+        ]
+        for cfg in self._SEMGREP_CONFIGS:
+            cmd += ["--config", cfg]
+        cmd.append(file_path)
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
             )
-        # Passive / defensive mode — original prompt
-        lines_str = ", ".join(str(n) for n in sorted(flagged_lines))
-        return (
-            f"You are a security code reviewer analyzing {file_path}.\n"
-            f"These lines were flagged by static analysis: {lines_str}\n\n"
-            f"Source code:\n```{lang}\n{source_code}\n```\n\n"
-            "List only the line numbers that contain real security vulnerabilities "
-            "(e.g. XSS, prompt injection, CORS misconfiguration, hardcoded secrets, "
-            "command injection, open redirect, error leakage). "
-            "Respond with line numbers only, comma-separated. "
-            "If none are suspicious, say 'none'."
-        )
+            # semgrep exit codes: 0 = clean, 1 = findings, 2+ = error
+            if result.returncode > 1:
+                return set()
+            data = json.loads(result.stdout)
+            return {r["start"]["line"] for r in data.get("results", [])}
+        except FileNotFoundError:
+            # semgrep not installed — degrade gracefully
+            return set()
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError):
+            return set()
 
-    def _call_with_retry(self, prompt: str) -> str:
-        last_exc: Optional[Exception] = None
-        for attempt in range(self._max_retries):
-            try:
-                response = self._client.messages.create(
-                    model=self._model,
-                    max_tokens=256,
-                    messages=[{"role": "user", "content": prompt}],
-                )
-                return response.content[0].text
-            except Exception as exc:
-                last_exc = exc
-                if attempt < self._max_retries - 1:
-                    time.sleep(2 ** attempt)
-        raise last_exc  # type: ignore[misc]
-
-    @staticmethod
-    def _parse_line_numbers(text: str) -> Set[int]:
-        """Extract all integers from response text."""
-        return {int(n) for n in re.findall(r"\d+", text)}
+    @classmethod
+    def semgrep_available(cls) -> bool:
+        """Return True if semgrep is installed and reachable."""
+        try:
+            subprocess.run(
+                ["semgrep", "--version"],
+                capture_output=True,
+                timeout=5,
+                check=True,
+            )
+            return True
+        except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return False
