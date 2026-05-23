@@ -10,8 +10,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
-import anthropic
-
 from agent.correlator import Correlator
 from agent.models import ExploitChain, MergedFinding, ScanResult, Vulnerability
 from chains.detector import ExploitChainDetector
@@ -391,9 +389,7 @@ async def execute_redteam(args: Namespace) -> dict[str, Any]:
                 chains = list(audit_result.exploit_chains)
                 if not getattr(args, "no_llm_payloads", False) and chains:
                     try:
-                        cfg = get_config()
-                        client = anthropic.Anthropic(api_key=cfg.api_key)
-                        detector = ExploitChainDetector(client, model=cfg.sonnet_model)
+                        detector = ExploitChainDetector()
                         chains = detector.enhance_chains(chains)
                     except Exception as exc:  # noqa: BLE001
                         log_step("redteam.phase.warn", phase="chain.llm", err=str(exc))
