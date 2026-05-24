@@ -499,3 +499,9 @@ For responsible disclosure of vulnerabilities in SWIFTSEC itself, see [`SECURITY
 ## License
 
 MIT — see [`LICENSE`](LICENSE).
+
+---
+
+### Powered by Claude-BugHunter
+
+SWIFT v8.0 vendors [`elementalsouls/Claude-BugHunter`](https://github.com/elementalsouls/Claude-BugHunter) (MIT) — 51 skill bundles, 14 slash commands, and 574+ disclosed-report patterns across 24 bug classes by Sachin Sharma (ElementalSoul). Foundation skills from [`shuvonsec/claude-bug-bounty`](https://github.com/shuvonsec/claude-bug-bounty) (MIT).

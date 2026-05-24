@@ -9,8 +9,10 @@
 #   hunt acme            # creates ~/Targets/acme/ with full template
 #   hunt                 # shows usage
 #
-# Customize HUNT_BASE in your environment to override the parent dir:
-#   export HUNT_BASE="$HOME/security-research/Targets"
+# Customize engagement root (priority order):
+#   export SWIFT_ENGAGEMENT_ROOT="$HOME/Downloads/SWIFT"   # SWIFT workspace rule (highest priority)
+#   export HUNT_BASE="$HOME/security-research/Targets"     # CBH legacy override
+# Default: $HOME/Downloads/SWIFT
 #
 # Install: source this file from your ~/.zshrc or ~/.bashrc
 #   echo 'source ~/.claude/scripts/hunt.sh' >> ~/.zshrc
@@ -19,13 +21,13 @@
 
 hunt() {
   local target="$1"
-  local base="${HUNT_BASE:-$HOME/Targets}"
+  local base="${SWIFT_ENGAGEMENT_ROOT:-${HUNT_BASE:-$HOME/Downloads/SWIFT}}"
   local dir="$base/$target"
 
   if [ -z "$target" ]; then
     echo "Usage: hunt <target-name>"
     echo "Creates a new engagement folder at \$HUNT_BASE/<target-name>"
-    echo "Default \$HUNT_BASE is $HOME/Targets"
+    echo "Default \$SWIFT_ENGAGEMENT_ROOT is $HOME/Downloads/SWIFT"
     return 1
   fi
 

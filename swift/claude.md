@@ -49,7 +49,10 @@ one audit log (`log/audit.py`), and one finding shape
     ├── skills/               # v8: vendored swift-prefixed skills + slash commands
     │   ├── agents/swift-*.md       # 8 agent skills
     │   ├── commands/swift-*.md     # 23 slash commands
-    │   └── README.md
+    │   ├── README.md
+    │   └── cbh/                     # vendored elementalsouls/Claude-BugHunter (MIT, squash-merge)
+    │       ├── skills/              # 51 SKILL.md bundles (keyword-triggered via Claude Code)
+    │       └── commands/            # 14 slash commands (/hunt, /triage, /report, /autopilot, etc.)
     ├── security/
     │   └── roe.py            # KNOWN_TECHNIQUES + load_roe + assert_* (v8 added: tmux_interactive,
     │                         #   vuln_pipeline, engagement_planning, web3_audit, auth_chain,
@@ -78,6 +81,8 @@ one audit log (`log/audit.py`), and one finding shape
 | `swiftsec lab {up,down,status,graphs}` | docker-compose lab management            | (no ROE)                       |
 | `swiftsec skills {install,uninstall,list}` | Symlink swift/skills into ~/.claude/ | (no ROE)                       |
 | `swiftsec kg {export,neighbors,prune}` | Knowledge graph inspection                | (read-only)                    |
+| `swiftsec cbh <args>` | Delegate to CBH's deterministic terminal CLI (`cbh.py`) | (no ROE) |
+| `swiftsec kev-refresh` | Pull latest CISA KEV catalog into intel/data/cisa_kev.json | (no ROE) |
 
 The v7 surface (`scan`, `redteam`, `web-scan`, `research`, `kali-scan`, `osint`,
 `intel`, `chain`, `attack-sim`, `audit`, `plugin`, etc.) is unchanged.
