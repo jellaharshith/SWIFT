@@ -21,6 +21,10 @@ When the user's request matches an available skill, invoke it via the Skill tool
 - Visual polish                     -> `/design-review`
 - Ship / deploy / PR                -> `/ship` or `/land-and-deploy`
 - Save / resume context             -> `/context-save` / `/context-restore`
+- Enterprise attack chains (M365/Okta/vCenter/VPN) -> `/chain-cbh` or CBH `hunt-*` skills
+- CBH triage/validation                              -> `/triage` (CBH 7-Question Gate)
+- CISA KEV data refresh                              -> `swiftsec kev-refresh`
+- CBH terminal runner                                -> `swiftsec cbh <args>`
 
 ## Operator doctrine
 

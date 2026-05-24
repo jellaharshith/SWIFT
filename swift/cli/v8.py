@@ -105,6 +105,8 @@ def register(sub: argparse._SubParsersAction) -> None:
     sk_i = sk.add_parser("install", help="Symlink swift/skills into ~/.claude/")
     sk_i.add_argument("--dry-run", action="store_true")
     sk_i.add_argument("--force", action="store_true", help="overwrite existing non-symlink files of the same name")
+    sk_i.add_argument("--source", choices=["swift", "cbh", "all"], default="all",
+                      help="which skill bundle to install (default: all)")
     sk.add_parser("uninstall", help="Remove SWIFT-installed symlinks")
     sk.add_parser("list",      help="Show currently installed skills + commands")
 
@@ -132,6 +134,13 @@ def register(sub: argparse._SubParsersAction) -> None:
     kgn.add_argument("--relation", default=None)
     kgp = kg.add_parser("prune", help="Drop everything for an engagement (re-scope)")
     kgp.add_argument("engagement_id")
+
+    # cbh -----------------------------------------------------------------
+    p = sub.add_parser("cbh", help="Run the Claude-BugHunter CLI (cbh.py) — deterministic terminal runner")
+    p.add_argument("cbh_args", nargs=argparse.REMAINDER, help="arguments forwarded to cbh.py")
+
+    # kev-refresh ---------------------------------------------------------
+    sub.add_parser("kev-refresh", help="Pull latest CISA KEV catalog into swift/intel/data/cisa_kev.json")
 
 
 # --------------------------------------------------------------------- handlers
@@ -366,7 +375,7 @@ def run_skills(args: argparse.Namespace) -> dict[str, Any]:
     if args.skills_cmd == "list":
         return _skills_list()
     if args.skills_cmd == "install":
-        return _skills_install(dry_run=args.dry_run, force=args.force)
+        return _skills_install(dry_run=args.dry_run, force=args.force, source=args.source)
     if args.skills_cmd == "uninstall":
         return _skills_uninstall()
     return {"status": "error", "message": f"unknown skills cmd: {args.skills_cmd}"}
@@ -428,19 +437,49 @@ def _vendored_skills_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "skills"
 
 
-def _skills_install(*, dry_run: bool, force: bool) -> dict[str, Any]:
+def _skills_install(*, dry_run: bool, force: bool, source: str = "all") -> dict[str, Any]:
     src_root = _vendored_skills_dir()
     if not src_root.exists():
         return {"status": "error", "message": f"vendored skills dir missing: {src_root}"}
 
+    # Each tuple: (src_file, dst_root, provenance)
+    entries: list[tuple[Path, Path, str]] = []
+
+    if source in ("swift", "all"):
+        for kind, dst_root in (("agents", _claude_skills_dir()), ("commands", _claude_commands_dir())):
+            src_dir = src_root / kind
+            for src_file in src_dir.glob("swift-*.md"):
+                entries.append((src_file, dst_root, "swift"))
+
+    if source in ("cbh", "all"):
+        cbh_root = src_root / "cbh"
+        # CBH skills: each lives in a subdir as SKILL.md; symlink as <dir-name>.md
+        cbh_skills_dir = cbh_root / "skills"
+        if cbh_skills_dir.exists():
+            for src_file in cbh_skills_dir.rglob("SKILL.md"):
+                entries.append((src_file, _claude_skills_dir(), "cbh"))
+        # CBH commands are flat .md files
+        cbh_commands_dir = cbh_root / "commands"
+        if cbh_commands_dir.exists():
+            for src_file in cbh_commands_dir.glob("*.md"):
+                entries.append((src_file, _claude_commands_dir(), "cbh"))
+
     plan: list[dict[str, str]] = []
-    for kind, dst_root in (("agents", _claude_skills_dir()), ("commands", _claude_commands_dir())):
-        src_dir = src_root / kind
+    for src_file, dst_root, provenance in entries:
         dst_root.mkdir(parents=True, exist_ok=True)
-        for src_file in src_dir.glob("swift-*.md"):
-            dst_file = dst_root / src_file.name
-            action = _plan_install(src_file, dst_file, force=force)
-            plan.append({"kind": kind, "src": str(src_file), "dst": str(dst_file), "action": action})
+        # CBH SKILL.md files: use parent dir name as the symlink filename
+        if provenance == "cbh" and src_file.name == "SKILL.md":
+            dst_name = src_file.parent.name + ".md"
+        else:
+            dst_name = src_file.name
+        dst_file = dst_root / dst_name
+        action = _plan_install(src_file, dst_file, force=force)
+        plan.append({
+            "provenance": provenance,
+            "src": str(src_file),
+            "dst": str(dst_file),
+            "action": action,
+        })
 
     if dry_run:
         return {"status": "dry-run", "actions": plan}
@@ -471,26 +510,71 @@ def _plan_install(src: Path, dst: Path, *, force: bool) -> str:
 
 
 def _skills_uninstall() -> dict[str, Any]:
+    cbh_root = _vendored_skills_dir() / "cbh"
     removed: list[str] = []
-    for kind, dst_root in (("agents", _claude_skills_dir()), ("commands", _claude_commands_dir())):
+    for dst_root in (_claude_skills_dir(), _claude_commands_dir()):
         if not dst_root.exists():
             continue
+        # Remove SWIFT-prefixed symlinks
         for f in dst_root.glob("swift-*.md"):
             if f.is_symlink():
                 f.unlink()
                 removed.append(str(f))
+        # Remove any symlinks that point inside swift/skills/cbh/
+        for f in dst_root.iterdir():
+            if f.is_symlink():
+                try:
+                    target = Path(os.readlink(f))
+                    # Resolve relative symlinks against the dst_root
+                    if not target.is_absolute():
+                        target = (dst_root / target).resolve()
+                    if str(cbh_root) in str(target):
+                        f.unlink()
+                        removed.append(str(f))
+                except OSError:
+                    pass
     return {"status": "ok", "removed": removed}
 
 
 def _skills_list() -> dict[str, Any]:
-    out: dict[str, list[str]] = {"agents": [], "commands": []}
+    cbh_marker = "/cbh/"
+    out: dict[str, list[dict[str, str]]] = {"agents": [], "commands": []}
     for kind, dst_root in (("agents", _claude_skills_dir()), ("commands", _claude_commands_dir())):
         if not dst_root.exists():
             continue
-        for f in sorted(dst_root.glob("swift-*.md")):
+        for f in sorted(dst_root.iterdir()):
+            if not f.name.endswith(".md"):
+                continue
             tag = "link" if f.is_symlink() else "file"
-            out[kind].append(f"{tag}:{f.name}")
+            provenance = "unknown"
+            if f.is_symlink():
+                try:
+                    target = os.readlink(f)
+                    provenance = "cbh" if cbh_marker in target else "swift"
+                except OSError:
+                    pass
+            out[kind].append({"name": f.name, "tag": tag, "provenance": provenance})
     return {"status": "ok", "installed": out}
+
+
+def run_cbh(args: argparse.Namespace) -> dict[str, Any]:
+    cbh_script = Path(__file__).resolve().parent.parent / "skills" / "cbh" / "scripts" / "cbh.py"
+    if not cbh_script.exists():
+        return {"status": "error", "message": f"cbh.py not found at {cbh_script}; run `swiftsec skills install --source cbh` first"}
+    cmd = [sys.executable, str(cbh_script)] + list(args.cbh_args)
+    result = subprocess.run(cmd)
+    return {"status": "ok", "exit_code": result.returncode}
+
+
+def run_kev_refresh(args: argparse.Namespace) -> dict[str, Any]:
+    script = Path(__file__).resolve().parent.parent / "skills" / "cbh" / "scripts" / "refresh-cve-index.py"
+    if not script.exists():
+        return {"status": "error", "message": f"refresh-cve-index.py not found at {script}"}
+    out_dir = Path(__file__).resolve().parent.parent / "intel" / "data"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "SWIFT_KEV_OUTPUT": str(out_dir / "cisa_kev.json")}
+    result = subprocess.run([sys.executable, str(script)], env=env)
+    return {"status": "ok", "exit_code": result.returncode}
 
 
 def _handle_ptes(args: argparse.Namespace) -> int:
@@ -548,6 +632,8 @@ HANDLERS: dict[str, Callable[[argparse.Namespace], dict[str, Any]]] = {
     "skills":         run_skills,
     "kg":             run_kg,
     "ptes":           _handle_ptes,
+    "cbh":            run_cbh,
+    "kev-refresh":    run_kev_refresh,
 }
 
 # Commands that should bypass zero-trust + may emit non-JSON.
