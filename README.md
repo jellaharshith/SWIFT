@@ -103,6 +103,7 @@ is set, else Ollama.
 | `ai sync [--force] [--days N]` | Incrementally sync the local NVD/CVE mirror |
 | `ai ask "…" [--roe roe.yaml]` | One-shot question; CVE context auto-injected; active tools ROE-gated |
 | `ai repl [--roe roe.yaml]` | Interactive loop |
+| `ai schedule install\|uninstall\|status [--hour 7] [--minute 0]` | Daily CVE auto-sync (launchd on macOS, cron on Linux) |
 
 Five tools are exposed to the model: `cve_lookup`, `scope_check` (required before active
 work), `run_recon` (OSINT), `run_scan` (Playwright web scan), `draft_h1_report`.
@@ -112,9 +113,16 @@ work), `run_recon` (OSINT), `run_scan` (Playwright web scan), `draft_h1_report`.
 swiftsec ai sync --days 30                                   # build the CVE mirror
 swiftsec ai ask "Recent CISA-KEV CVEs affecting nginx?"      # CVE RAG, no target
 swiftsec ai ask "Recon and scan example.com" --roe roe.yaml  # active tools need an ROE
+
+# Keep the mirror fresh automatically — installs a daily 07:00 job
+swiftsec ai schedule install            # launchd (macOS) / cron (Linux); --hour/--minute to change
+swiftsec ai schedule status             # check it's loaded
 ```
 
-The package also ships a standalone CLI: `python -m swiftsec_ai.cli {info,sync,ask,repl}`.
+The daily job runs `swiftsec_ai.cli sync` in the repo directory (same `.env`, same
+`SWIFTSEC_CVE_DB`) and logs to `log/cve-sync.log`. On macOS, launchd runs a missed
+morning sync once the machine wakes. The package also ships a standalone CLI:
+`python -m swiftsec_ai.cli {info,sync,ask,repl,schedule}`.
 
 ---
 

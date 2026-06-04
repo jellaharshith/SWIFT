@@ -845,6 +845,11 @@ def build_parser() -> argparse.ArgumentParser:
     ai_ask.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
     ai_repl = ai_sub.add_parser("repl", help="Interactive assistant loop")
     ai_repl.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
+    ai_sched = ai_sub.add_parser(
+        "schedule", help="Daily CVE auto-sync job (launchd on macOS, cron on Linux)")
+    ai_sched.add_argument("action", choices=["install", "uninstall", "status"])
+    ai_sched.add_argument("--hour", type=int, default=7, help="hour of day, 0-23 (default 7)")
+    ai_sched.add_argument("--minute", type=int, default=0, help="minute, 0-59 (default 0)")
 
     # v8.0 -- Decepticon + claude-bug-bounty merged subcommands
     from cli.v8 import register as _register_v8
@@ -1352,6 +1357,19 @@ def run_ai(args: argparse.Namespace) -> dict[str, Any]:
     from swiftsec_ai import SwiftSecAssistant
     from swiftsec_ai.config import load_settings as _load_settings
     from bounty.report_formats import format_report as _format_report
+
+    # Scheduling needs no LLM backend / CVE store — handle it up front.
+    if getattr(args, "ai_cmd", None) == "schedule":
+        from swiftsec_ai import schedule as _schedule
+        action = args.action
+        if action == "install":
+            result = _schedule.install(hour=args.hour, minute=args.minute)
+        elif action == "uninstall":
+            result = _schedule.uninstall()
+        else:
+            result = _schedule.status()
+        print(json.dumps(result, indent=2))
+        return {"status": "ok", "command": "ai", "ai_cmd": "schedule", "action": action}
 
     roe_path = getattr(args, "roe", None)
 

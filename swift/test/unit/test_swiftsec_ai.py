@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from swiftsec_ai import schedule
 from swiftsec_ai.config import Settings, load_settings
 from swiftsec_ai.cve import CVEStore, parse_nvd_cve
 from swiftsec_ai.llm import (
@@ -205,3 +206,17 @@ def test_both_backends_translate_same_neutral_schema(store):
         assert o["type"] == "function"
         assert o["function"]["parameters"] == n["parameters"]
         assert o["function"]["description"] == n["description"]
+
+
+# --------------------------------------------------------------- scheduler
+
+def test_schedule_status_returns_dict():
+    st = schedule.status()
+    assert "scheduler" in st
+    assert st["scheduler"] in {"launchd", "cron"}
+
+
+def test_schedule_install_rejects_invalid_time():
+    # Invalid time must fail fast, before any OS-level write.
+    out = schedule.install(hour=99, minute=0)
+    assert out["status"] == "error"

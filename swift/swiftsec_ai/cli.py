@@ -29,11 +29,29 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("repl", help="Interactive prompt loop")
     sub.add_parser("info", help="Show backend, model, and CVE store status")
+
+    sched = sub.add_parser(
+        "schedule", help="Daily CVE auto-sync job (launchd on macOS, cron on Linux)")
+    sched.add_argument("action", choices=["install", "uninstall", "status"])
+    sched.add_argument("--hour", type=int, default=7, help="hour of day, 0-23 (default 7)")
+    sched.add_argument("--minute", type=int, default=0, help="minute, 0-59 (default 0)")
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+
+    # Scheduling is OS-level and needs no LLM backend / CVE store.
+    if args.command == "schedule":
+        from . import schedule as _schedule
+        if args.action == "install":
+            print(json.dumps(_schedule.install(hour=args.hour, minute=args.minute), indent=2))
+        elif args.action == "uninstall":
+            print(json.dumps(_schedule.uninstall(), indent=2))
+        else:
+            print(json.dumps(_schedule.status(), indent=2))
+        return 0
+
     settings = load_settings()
     assistant = SwiftSecAssistant(settings)
     try:
