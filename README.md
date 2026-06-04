@@ -80,6 +80,44 @@ Architecture reference: see `swift/CLAUDE.md`. Per-file upstream attribution: se
 
 ---
 
+## AI Assistant (`swiftsec ai`)
+
+`swiftsec_ai` is an SDK-free LLM assistant that reasons like an ethical hacker, stays
+current on CVEs via **live retrieval (RAG)**, and drives the existing SWIFTSEC modules
+through tool-calling.
+
+Models have a fixed training cutoff and new CVEs land daily, so currency is solved with
+retrieval, not weights: an incremental NVD sync lands in a local SQLite + FTS5 store and
+the relevant CVEs are injected into the prompt at query time. The "acts like a pentester"
+behaviour lives in the system prompt — scope-gated, methodology-driven (recon → enum →
+vuln-analysis → validation → reporting), never fabricates CVE IDs, drafts reports but
+never auto-submits.
+
+Two interchangeable backends, no LLM SDKs (`requests` only): **Ollama** (local) or
+**Anthropic** (REST). `SWIFTSEC_LLM_BACKEND=auto` picks Anthropic when `ANTHROPIC_API_KEY`
+is set, else Ollama.
+
+| `swiftsec ai` subcommand | Purpose |
+|---|---|
+| `ai info` | Show backend, model, and CVE-store status |
+| `ai sync [--force] [--days N]` | Incrementally sync the local NVD/CVE mirror |
+| `ai ask "…" [--roe roe.yaml]` | One-shot question; CVE context auto-injected; active tools ROE-gated |
+| `ai repl [--roe roe.yaml]` | Interactive loop |
+
+Five tools are exposed to the model: `cve_lookup`, `scope_check` (required before active
+work), `run_recon` (OSINT), `run_scan` (Playwright web scan), `draft_h1_report`.
+
+```sh
+# Local backend (free): ollama pull llama3.1   — or set ANTHROPIC_API_KEY for cloud
+swiftsec ai sync --days 30                                   # build the CVE mirror
+swiftsec ai ask "Recent CISA-KEV CVEs affecting nginx?"      # CVE RAG, no target
+swiftsec ai ask "Recon and scan example.com" --roe roe.yaml  # active tools need an ROE
+```
+
+The package also ships a standalone CLI: `python -m swiftsec_ai.cli {info,sync,ask,repl}`.
+
+---
+
 ## Overview
 
 SWIFTSEC is a professional-grade, AI-powered red-team automation platform built for authorized penetration testing engagements. It orchestrates a full offensive pipeline — from passive OSINT through active exploitation and post-exploit simulation — using Claude Sonnet as the reasoning engine and a continuously updated RAG knowledge base.
@@ -360,6 +398,7 @@ allow_chain_execution: false   # set true only for Juice Shop / DVWA targets
 | `live-feed` | — | NVD + CISA KEV threat stream |
 | `privesc` | — | Docker privilege escalation check (`--allow-privesc` required) |
 | `wizard` | — | Interactive engagement wizard |
+| `ai info\|sync\|ask\|repl` | ⚠️ per-tool | LLM ethical-hacker assistant (live-CVE RAG + tool-calling); active tools ROE-gated |
 
 ---
 
@@ -404,6 +443,22 @@ cp swift/.env.example .env
 | `SWIFT_GPG_KEY_ID` | GPG key ID for engagement manifest signing |
 | `SWIFT_AGENT_BUDGET_PROBES` | Max probe calls per agentic engagement |
 | `SWIFT_AGENT_BUDGET_SONNET_CALLS` | Max Sonnet calls per agentic engagement |
+
+### AI Assistant (`swiftsec_ai`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SWIFTSEC_LLM_BACKEND` | `auto` | `auto` (anthropic if `ANTHROPIC_API_KEY` set, else ollama) \| `ollama` \| `anthropic` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_MODEL` | `llama3.1` | Local model name |
+| `OLLAMA_TIMEOUT` | `120` | Request timeout (s) |
+| `ANTHROPIC_MODEL` | `claude-opus-4-8` | Claude model (REST, no SDK) |
+| `ANTHROPIC_MAX_TOKENS` | `4096` | Max output tokens |
+| `SWIFTSEC_CVE_DB` | `swiftsec_cve.db` | Local NVD/CVE SQLite+FTS5 mirror path |
+| `SWIFTSEC_CVE_INITIAL_DAYS` | `30` | Initial backfill window |
+| `SWIFTSEC_CVE_MIN_SYNC_INTERVAL` | `7200` | Min seconds between syncs (unless `--force`) |
+| `SWIFTSEC_CONTEXT_RESULTS` | `5` | CVEs injected into the prompt per query |
+| `SWIFTSEC_MAX_TOOL_ITERS` | `6` | Max tool-call iterations per question |
 
 ---
 
