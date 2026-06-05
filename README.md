@@ -124,6 +124,34 @@ The daily job runs `swiftsec_ai.cli sync` in the repo directory (same `.env`, sa
 morning sync once the machine wakes. The package also ships a standalone CLI:
 `python -m swiftsec_ai.cli {info,sync,ask,repl,schedule}`.
 
+### Backend setup notes
+
+**Anthropic (simplest):** set `ANTHROPIC_API_KEY` in `.env`. No local compute or
+disk — `SWIFTSEC_LLM_BACKEND=auto` switches to it automatically. Best when the host
+disk is full or you want fast answers.
+
+**Ollama (local, free):**
+
+- The Homebrew `ollama` formula has shipped **without the `llama-server` runner**
+  (inference 500s with `llama-server binary not found`). If you hit that, use the
+  official self-contained build instead:
+  ```sh
+  curl -fsSL -o ollama-darwin.tgz \
+    https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz
+  mkdir -p ollama-bin && tar -xzf ollama-darwin.tgz -C ollama-bin
+  xattr -dr com.apple.quarantine ollama-bin
+  ./ollama-bin/ollama serve &        # bundles llama-server + Metal libs
+  ./ollama-bin/ollama pull llama3.1
+  ```
+- **Store the model off a full system disk** by pointing the *server* at another
+  volume before starting it: `OLLAMA_MODELS="/Volumes/<ext>/ollama-models" ollama serve`.
+  The blob dir is chosen by the server, not the `pull` client.
+- On exFAT volumes ollama disables `mmap`, so the first (cold) load reads the whole
+  model and can take ~90 s. Bump `OLLAMA_TIMEOUT` (e.g. `300`) so `ai ask` survives
+  the cold load, and the model then stays warm in RAM via `keep_alive`.
+- Lighter/faster model if 8B is slow: `ollama pull llama3.2:3b` and set
+  `OLLAMA_MODEL=llama3.2:3b`.
+
 ---
 
 ## Overview
