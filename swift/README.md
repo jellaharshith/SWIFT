@@ -125,6 +125,8 @@ SWIFT **hard fails** (`[DENY]` + exit 2) if:
 | `live-feed` | Stream live CVEs from NVD + CISA KEV |
 | `privesc` | Docker-based privilege escalation tester |
 | `wizard` | Interactive scanner wizard |
+| `ai info\|sync\|ask\|repl` | LLM ethical-hacker assistant: live-CVE RAG (NVD→SQLite/FTS5) + tool-calling over recon/scan/scope/report. Backends: Ollama or Anthropic (no SDK). Active tools ROE-gated; reports drafted only. See root README → "AI Assistant". |
+| `ai schedule install\|uninstall\|status` | Daily CVE auto-sync (07:00) via launchd (macOS) / cron (Linux). `--hour`/`--minute` to change. |
 
 ## Active probe types
 

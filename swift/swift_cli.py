@@ -833,6 +833,38 @@ def build_parser() -> argparse.ArgumentParser:
     intel_ver.add_argument("--rollback", default=None, metavar="ID",
                            help="Roll back to version ID")
 
+    # swiftsec_ai -- LLM ethical-hacker assistant (CVE RAG + tool-calling)
+    ai_p = sub.add_parser("ai", help="LLM ethical-hacker assistant (live-CVE RAG + tool-calling)")
+    ai_sub = ai_p.add_subparsers(dest="ai_cmd", required=True)
+    ai_sub.add_parser("info", help="Show backend, model, and CVE store status")
+    ai_sync = ai_sub.add_parser("sync", help="Incrementally sync the local NVD/CVE mirror")
+    ai_sync.add_argument("--force", action="store_true", help="ignore the min sync interval")
+    ai_sync.add_argument("--days", type=int, default=None, help="initial backfill window (days)")
+    ai_ask = ai_sub.add_parser("ask", help="Ask the assistant a single question")
+    ai_ask.add_argument("message", help="your question / instruction")
+    ai_ask.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
+    ai_repl = ai_sub.add_parser("repl", help="Interactive assistant loop")
+    ai_repl.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
+    ai_sched = ai_sub.add_parser(
+        "schedule", help="Daily CVE auto-sync job (launchd on macOS, cron on Linux)")
+    ai_sched.add_argument("action", choices=["install", "uninstall", "status"])
+    ai_sched.add_argument("--hour", type=int, default=7, help="hour of day, 0-23 (default 7)")
+    ai_sched.add_argument("--minute", type=int, default=0, help="minute, 0-59 (default 0)")
+    ai_asm = ai_sub.add_parser(
+        "ai-asm", help="Map a target's AI-specific attack surface (run before standard recon)")
+    ai_asm.add_argument("target", help="host or URL")
+    ai_asm.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
+    ai_rt = ai_sub.add_parser(
+        "ai-redteam", help="Send crafted attack prompts to an LLM endpoint and score responses")
+    ai_rt.add_argument("endpoint", help="LLM endpoint URL")
+    ai_rt.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
+    ai_rt.add_argument(
+        "--category", default="all",
+        help="prompt_injection|jailbreak|data_exfil|indirect_injection|model_dos|hallucination_abuse|all")
+    ai_rt.add_argument(
+        "--confirm", action="store_true",
+        help="explicit operator confirmation -- required, endpoint must be authorized for technique=exploit in the ROE")
+
     # v8.0 -- Decepticon + claude-bug-bounty merged subcommands
     from cli.v8 import register as _register_v8
     _register_v8(sub)
@@ -1325,6 +1357,139 @@ def run_auto(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def run_ai(args: argparse.Namespace) -> dict[str, Any]:
+    """swiftsec ai — LLM ethical-hacker assistant with live-CVE RAG + tool-calling.
+
+    Wires the real SWIFTSEC callables (ROE/scope, OSINT recon, web scan, H1 report)
+    into the swiftsec_ai assistant. Active tools stay ROE-gated; reports are drafted
+    only, never auto-submitted.
+    """
+    import json as _json
+    from pathlib import Path as _Path
+    from datetime import datetime as _dt, timezone as _tz
+
+    from swiftsec_ai import SwiftSecAssistant
+    from swiftsec_ai.config import load_settings as _load_settings
+    from bounty.report_formats import format_report as _format_report
+
+    # Scheduling needs no LLM backend / CVE store — handle it up front.
+    if getattr(args, "ai_cmd", None) == "schedule":
+        from swiftsec_ai import schedule as _schedule
+        action = args.action
+        if action == "install":
+            result = _schedule.install(hour=args.hour, minute=args.minute)
+        elif action == "uninstall":
+            result = _schedule.uninstall()
+        else:
+            result = _schedule.status()
+        print(json.dumps(result, indent=2))
+        return {"status": "ok", "command": "ai", "ai_cmd": "schedule", "action": action}
+
+    roe_path = getattr(args, "roe", None)
+
+    def _roe_adapter(target: str, technique: str = "active_scan") -> dict[str, Any]:
+        """Non-fatal scope verdict (never sys.exit, unlike the assert_* helpers)."""
+        if not roe_path or not _Path(roe_path).exists():
+            return {"in_scope": False, "reason": "no valid ROE file (pass --roe <roe.yaml>)"}
+        try:
+            from security.roe import load_roe, assert_technique_allowed, ROEViolation
+            roe = load_roe(roe_path)
+            tl = target.lower()
+            in_scope = any(
+                tl == a or tl.startswith(a) or a in tl
+                for a in (str(x).lower() for x in roe.authorized_targets)
+            )
+            if not in_scope:
+                return {"in_scope": False,
+                        "reason": f"{target} not in authorized_targets {roe.authorized_targets}"}
+            now = _dt.now(_tz.utc)
+            if now < roe.window_start or now > roe.window_end:
+                return {"in_scope": False, "reason": "engagement window not active"}
+            try:
+                assert_technique_allowed(roe, technique, raise_on_violation=True)
+            except ROEViolation as e:
+                return {"in_scope": False, "reason": str(e)}
+            return {"in_scope": True, "reason": f"authorized by ROE {roe.engagement_id}"}
+        except SystemExit as e:
+            return {"in_scope": False, "reason": f"ROE load failed: {e}"}
+
+    def _recon_adapter(target: str):
+        from osint.runner import run_osint as _osint_run
+        return _osint_run(target)  # coroutine; tools layer awaits it
+
+    def _scanner_adapter(target: str):
+        from browser.playwright_runner import scan_url
+        from browser.rate_gate import AsyncRateGate
+        gate = None
+        if roe_path and _Path(roe_path).exists():
+            try:
+                from security.roe import load_roe
+                roe = load_roe(roe_path)
+                if roe.rate_limit_rps:
+                    gate = AsyncRateGate(rps=roe.rate_limit_rps, burst=roe.rate_limit_burst)
+            except SystemExit:
+                pass
+        return scan_url(target, headless=True, rate_gate=gate)
+
+    settings = _load_settings()
+    assistant = SwiftSecAssistant(
+        settings,
+        roe=_roe_adapter,
+        recon=_recon_adapter,
+        scanner=_scanner_adapter,
+        h1=lambda d: _format_report("h1", d),
+    )
+    try:
+        cmd = getattr(args, "ai_cmd", None)
+        if cmd == "info":
+            print(_json.dumps(assistant.info(), indent=2))
+        elif cmd == "sync":
+            print(_json.dumps(
+                assistant.update_cves(force=args.force, initial_days=args.days), indent=2))
+        elif cmd == "ask":
+            print(assistant.ask(args.message))
+        elif cmd == "repl":
+            print("SWIFTSEC-AI REPL — type 'exit' or Ctrl-D to quit.")
+            while True:
+                try:
+                    line = input("swiftsec-ai> ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print()
+                    break
+                if line.lower() in {"exit", "quit"}:
+                    break
+                if line:
+                    print(assistant.ask(line))
+        elif cmd == "ai-asm":
+            from log.audit import log_step
+            verdict = _roe_adapter(args.target, "active_scan")
+            if not verdict.get("in_scope"):
+                print(_json.dumps({"error": f"REFUSED: {args.target} not authorized", **verdict}, indent=2))
+                return {"status": "refused", "command": "ai", "ai_cmd": cmd}
+            from swiftsec_ai.ai_asm import run_ai_asm
+            result = run_ai_asm(args.target)
+            log_step("ai_asm", target=args.target, surfaces=result["tier1_count"])
+            print(_json.dumps(result, indent=2))
+        elif cmd == "ai-redteam":
+            from log.audit import log_step
+            if not args.confirm:
+                print(_json.dumps(
+                    {"error": "REFUSED: --confirm required -- operator must explicitly opt in"},
+                    indent=2))
+                return {"status": "refused", "command": "ai", "ai_cmd": cmd}
+            verdict = _roe_adapter(args.endpoint, "exploit")
+            if not verdict.get("in_scope"):
+                print(_json.dumps({"error": f"REFUSED: {args.endpoint} not authorized for exploit", **verdict}, indent=2))
+                return {"status": "refused", "command": "ai", "ai_cmd": cmd}
+            from swiftsec_ai.redteam import AIRedTeamer
+            result = AIRedTeamer().run(args.endpoint, category=args.category, confirmed=True)
+            log_step("ai_redteam", endpoint=args.endpoint, findings=len(result["findings_queued"]))
+            print(_json.dumps(result, indent=2))
+        return {"status": "ok", "command": "ai", "ai_cmd": cmd}
+    finally:
+        assistant.close()
+
+
 def main() -> None:
     from log.logger import get_logger
     from cli.repl import run_repl, NO_JSON_DUMP_CMDS
@@ -1376,7 +1541,7 @@ def main() -> None:
     if args.command not in {"kali-scan", "live-feed", "attack-sim", "full-scan",
                              "wizard", "web-scan", "privesc", "redteam", "osint",
                              "payload", "niche", "chain", "version", "update", "auto",
-                             "init"} | _V6_NO_ZERO_TRUST | _V8_EXEMPT:
+                             "init", "ai"} | _V6_NO_ZERO_TRUST | _V8_EXEMPT:
         _ensure_zero_trust(args)
 
     # v6.0 commands handled inline (no JSON dump)
@@ -1425,11 +1590,12 @@ def main() -> None:
         "intel": run_intel,
         "init": run_init,
         "research": run_research,
+        "ai": run_ai,
     }
     # v8.0 -- merge in Decepticon + claude-bug-bounty subcommand handlers
     from cli.v8 import HANDLERS as _V8_HANDLERS, NO_JSON_DUMP as _V8_NO_JSON
     handlers.update(_V8_HANDLERS)
-    no_json_dump = NO_JSON_DUMP_CMDS | _V8_NO_JSON
+    no_json_dump = NO_JSON_DUMP_CMDS | _V8_NO_JSON | {"ai"}  # ai prints its own output
     try:
         payload = handlers[args.command](args)
         log_step("cli.complete", command=args.command)

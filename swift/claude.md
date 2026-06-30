@@ -154,6 +154,65 @@ Topology: `pre_engage` → `intel` → `threat_model` → `vuln` → `exploit_ph
 
 Bug-bounty routing: `swiftsec hunt --ptes` routes through the same DAG via `bounty/ptes_router.py` with bounty ROE profile.
 
+## AI security layer (swiftsec_ai/)
+
+Six additions to `swift/swiftsec_ai/` close PANW Prisma AIRS / Cortex XSIAM
+parity gaps for the bare assistant package (CVE RAG + tool-calling core, not
+the v8 langgraph layer).
+
+**Runtime firewall** — `guardrail.py:LLMGuardrail`. Every `AnthropicBackend.run`
+/ `OllamaBackend.run` call (`llm.py`) calls `guardrail.enforce(user_message)`
+before the request goes out (raises `GuardrailViolation` on prompt-injection /
+scope-override language) and `guardrail.scan_response(...)` on the way back
+(masks credential/SSN/card/private-key shaped substrings before the text is
+returned). Flag events append to `logs/guardrail-<YYYYMMDD>.jsonl`.
+
+**MCP security gateway** — `tools.py:MCPValidator`. `ToolRegistry.execute` runs
+`validate_tool_call` (schema-required-args check, credential-in-args check,
+injection-in-args check, scope gate for `run_*`/`ai_asm`/`redteam` tools) before
+dispatch, and `validate_tool_output` (sensitive-data masking) on every result
+before it reaches the agent.
+
+**Agentic identity** — `identity.py:SubAgentIdentity`. Role-scoped permission
+sets (`recon` / `enum` / `exploit` / `report`, see `PERMISSION_SETS`) with
+`assert_can(tool)` raising `PermissionError` on out-of-role calls, and a
+signed append-only action log at `logs/agent-<role>-<engagement>.jsonl`.
+`write_agent_manifest(...)` renders `AGENT_MANIFEST.md`. Standalone today —
+the bare assistant is single-agent; wire this in when a multi-agent caller
+(e.g. the v8 langgraph layer) spawns sub-agents.
+
+**AI attack surface mapper** — `ai_asm.py:run_ai_asm`. Registered as the
+`ai_asm` tool, the standalone `swiftsec_ai ai-asm <target>` CLI command, and
+the fully-wired `swiftsec ai ai-asm <target> --roe roe.yaml` (`swift_cli.py`,
+real ROE gate via `security/roe.py`, technique=`active_scan`, logged via
+`log.audit.log_step("ai_asm", ...)`). Passive/light-active checks (HTTP GET on
+common LLM paths, TCP connect on inference/vector-DB ports, key-pattern scan
+of the landing page) — same risk tier as `run_recon`. Writes
+`engagements/<target>/ai_asm_<ts>.json`. Run this before standard recon on any
+target with chat/search/copilot/AI features.
+
+**AI red teaming** — `redteam.py:AIRedTeamer`. Registered as the `redteam`
+tool, the standalone `swiftsec_ai redteam <endpoint> --confirm` CLI command,
+and the fully-wired `swiftsec ai ai-redteam <endpoint> --roe roe.yaml
+--confirm` (real ROE gate, technique=`exploit`, audit-logged). Note: the
+top-level verb is `ai-redteam`, not `redteam` — `swiftsec redteam` is already
+the existing v7 full red-team pipeline (`swift_cli.py:625`), unrelated to LLM
+endpoint testing. Sends `ATTACK_CATEGORIES` payloads (prompt_injection,
+jailbreak, data_exfil, indirect_injection, model_dos, hallucination_abuse) to
+an in-scope endpoint and scores responses (`confidence > 0.7` → queued
+finding). Requires `confirmed=True` / `--confirm` — never fires without
+explicit operator opt-in. Writes `engagements/<endpoint>/redteam_<ts>.json`.
+
+**Unified observability** — `telemetry.py:Telemetry`. SQLite `run_events` table
+(+ FTS5 index, `LIKE` fallback if the local sqlite build lacks FTS5) at
+`swiftsec_telemetry.db`. `SwiftSecAssistant` logs `tool_call` on every tool
+invocation and `guardrail_violation` on every blocked prompt; `close()` writes
+`run_stop` and `COVERAGE.md` via `Telemetry.write_coverage`. Query with
+`Telemetry.query(term, engagement=...)`.
+
+Tests: `test/unit/test_swiftsec_ai.py` (20 tests, includes the two new tools
+in `test_registry_has_all_tools`).
+
 ## Licenses & attribution
 
 The merged work is MIT (see `LICENSE`). Two upstream sources are folded in:

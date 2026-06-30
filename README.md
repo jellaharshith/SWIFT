@@ -80,6 +80,95 @@ Architecture reference: see `swift/CLAUDE.md`. Per-file upstream attribution: se
 
 ---
 
+## AI Assistant (`swiftsec ai`)
+
+`swiftsec_ai` is an SDK-free LLM assistant that reasons like an ethical hacker, stays
+current on CVEs via **live retrieval (RAG)**, and drives the existing SWIFTSEC modules
+through tool-calling.
+
+Models have a fixed training cutoff and new CVEs land daily, so currency is solved with
+retrieval, not weights: an incremental NVD sync lands in a local SQLite + FTS5 store and
+the relevant CVEs are injected into the prompt at query time. The "acts like a pentester"
+behaviour lives in the system prompt — scope-gated, methodology-driven (recon → enum →
+vuln-analysis → validation → reporting), never fabricates CVE IDs, drafts reports but
+never auto-submits.
+
+Two interchangeable backends, no LLM SDKs (`requests` only): **Ollama** (local) or
+**Anthropic** (REST). `SWIFTSEC_LLM_BACKEND=auto` picks Anthropic when `ANTHROPIC_API_KEY`
+is set, else Ollama.
+
+| `swiftsec ai` subcommand | Purpose |
+|---|---|
+| `ai info` | Show backend, model, and CVE-store status |
+| `ai sync [--force] [--days N]` | Incrementally sync the local NVD/CVE mirror |
+| `ai ask "…" [--roe roe.yaml]` | One-shot question; CVE context auto-injected; active tools ROE-gated |
+| `ai repl [--roe roe.yaml]` | Interactive loop |
+| `ai schedule install\|uninstall\|status [--hour 7] [--minute 0]` | Daily CVE auto-sync (launchd on macOS, cron on Linux) |
+| `ai ai-asm <target> [--roe roe.yaml]` | Map a target's AI-specific attack surface (LLM endpoints, inference servers, vector DBs, leaked AI API keys) — run before standard recon on any target with AI features |
+| `ai ai-redteam <endpoint> [--roe roe.yaml] [--category …] --confirm` | Send crafted prompt-injection / jailbreak / data-exfil attack payloads to an in-scope LLM endpoint and score responses for compromise |
+
+Seven tools are exposed to the model: `cve_lookup`, `scope_check` (required before active
+work), `run_recon` (OSINT), `run_scan` (Playwright web scan), `draft_h1_report`, `ai_asm`,
+`redteam`. Every prompt/response passes `swiftsec_ai/guardrail.py` (`LLMGuardrail`: blocks
+prompt injection, masks credentials/PII before disk write); every tool call passes
+`swiftsec_ai/tools.py`'s `MCPValidator` (schema + credential + injection + scope gate before
+dispatch, output masking after); every run is archived to `swiftsec_ai/telemetry.py`'s
+SQLite+FTS5 `run_events` store (`swiftsec ai coverage` via the assistant's `Telemetry.
+write_coverage`). `swiftsec_ai/identity.py`'s `SubAgentIdentity` (role-scoped permissions +
+signed action log) is available for any future multi-agent caller.
+
+```sh
+# Local backend (free): ollama pull llama3.1   — or set ANTHROPIC_API_KEY for cloud
+swiftsec ai sync --days 30                                   # build the CVE mirror
+swiftsec ai ask "Recent CISA-KEV CVEs affecting nginx?"      # CVE RAG, no target
+swiftsec ai ask "Recon and scan example.com" --roe roe.yaml  # active tools need an ROE
+
+# AI attack surface mapping — run first on any target with chat/search/copilot features
+swiftsec ai ai-asm example.com --roe roe.yaml
+
+# AI red teaming — requires both ROE authorization (technique=exploit) and --confirm
+swiftsec ai ai-redteam https://example.com/api/chat --roe roe.yaml --category prompt_injection --confirm
+
+# Keep the mirror fresh automatically — installs a daily 07:00 job
+swiftsec ai schedule install            # launchd (macOS) / cron (Linux); --hour/--minute to change
+swiftsec ai schedule status             # check it's loaded
+```
+
+The daily job runs `swiftsec_ai.cli sync` in the repo directory (same `.env`, same
+`SWIFTSEC_CVE_DB`) and logs to `log/cve-sync.log`. On macOS, launchd runs a missed
+morning sync once the machine wakes. The package also ships a standalone CLI:
+`python -m swiftsec_ai.cli {info,sync,ask,repl,schedule}`.
+
+### Backend setup notes
+
+**Anthropic (simplest):** set `ANTHROPIC_API_KEY` in `.env`. No local compute or
+disk — `SWIFTSEC_LLM_BACKEND=auto` switches to it automatically. Best when the host
+disk is full or you want fast answers.
+
+**Ollama (local, free):**
+
+- The Homebrew `ollama` formula has shipped **without the `llama-server` runner**
+  (inference 500s with `llama-server binary not found`). If you hit that, use the
+  official self-contained build instead:
+  ```sh
+  curl -fsSL -o ollama-darwin.tgz \
+    https://github.com/ollama/ollama/releases/latest/download/ollama-darwin.tgz
+  mkdir -p ollama-bin && tar -xzf ollama-darwin.tgz -C ollama-bin
+  xattr -dr com.apple.quarantine ollama-bin
+  ./ollama-bin/ollama serve &        # bundles llama-server + Metal libs
+  ./ollama-bin/ollama pull llama3.1
+  ```
+- **Store the model off a full system disk** by pointing the *server* at another
+  volume before starting it: `OLLAMA_MODELS="/Volumes/<ext>/ollama-models" ollama serve`.
+  The blob dir is chosen by the server, not the `pull` client.
+- On exFAT volumes ollama disables `mmap`, so the first (cold) load reads the whole
+  model and can take ~90 s. Bump `OLLAMA_TIMEOUT` (e.g. `300`) so `ai ask` survives
+  the cold load, and the model then stays warm in RAM via `keep_alive`.
+- Lighter/faster model if 8B is slow: `ollama pull llama3.2:3b` and set
+  `OLLAMA_MODEL=llama3.2:3b`.
+
+---
+
 ## Overview
 
 SWIFTSEC is a professional-grade, AI-powered red-team automation platform built for authorized penetration testing engagements. It orchestrates a full offensive pipeline — from passive OSINT through active exploitation and post-exploit simulation — using Claude Sonnet as the reasoning engine and a continuously updated RAG knowledge base.
@@ -360,6 +449,7 @@ allow_chain_execution: false   # set true only for Juice Shop / DVWA targets
 | `live-feed` | — | NVD + CISA KEV threat stream |
 | `privesc` | — | Docker privilege escalation check (`--allow-privesc` required) |
 | `wizard` | — | Interactive engagement wizard |
+| `ai info\|sync\|ask\|repl` | ⚠️ per-tool | LLM ethical-hacker assistant (live-CVE RAG + tool-calling); active tools ROE-gated |
 
 ---
 
@@ -404,6 +494,22 @@ cp swift/.env.example .env
 | `SWIFT_GPG_KEY_ID` | GPG key ID for engagement manifest signing |
 | `SWIFT_AGENT_BUDGET_PROBES` | Max probe calls per agentic engagement |
 | `SWIFT_AGENT_BUDGET_SONNET_CALLS` | Max Sonnet calls per agentic engagement |
+
+### AI Assistant (`swiftsec_ai`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SWIFTSEC_LLM_BACKEND` | `auto` | `auto` (anthropic if `ANTHROPIC_API_KEY` set, else ollama) \| `ollama` \| `anthropic` |
+| `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_MODEL` | `llama3.1` | Local model name |
+| `OLLAMA_TIMEOUT` | `120` | Request timeout (s) |
+| `ANTHROPIC_MODEL` | `claude-opus-4-8` | Claude model (REST, no SDK) |
+| `ANTHROPIC_MAX_TOKENS` | `4096` | Max output tokens |
+| `SWIFTSEC_CVE_DB` | `swiftsec_cve.db` | Local NVD/CVE SQLite+FTS5 mirror path |
+| `SWIFTSEC_CVE_INITIAL_DAYS` | `30` | Initial backfill window |
+| `SWIFTSEC_CVE_MIN_SYNC_INTERVAL` | `7200` | Min seconds between syncs (unless `--force`) |
+| `SWIFTSEC_CONTEXT_RESULTS` | `5` | CVEs injected into the prompt per query |
+| `SWIFTSEC_MAX_TOOL_ITERS` | `6` | Max tool-call iterations per question |
 
 ---
 

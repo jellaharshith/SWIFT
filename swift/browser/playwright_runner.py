@@ -179,9 +179,15 @@ async def _probe_sqli(page, url: str, result: BrowserScanResult) -> None:
 
 
 async def _probe_open_redirect(page, url: str, result: BrowserScanResult) -> None:
-    """Probe URL params with open-redirect payloads; detect evil.example.com in final URL."""
+    """Probe URL params with open-redirect payloads; detect evil.example.com in final URL.
+
+    Checks the actual hostname of the redirected-to URL, not the raw URL string, to
+    avoid false positives where the payload appears URL-encoded in the query string
+    while the browser stays on the original host (URL normalisation redirect).
+    """
     params = list(parse_qsl(urlparse(url).query, keep_blank_values=True))
     test_keys = [k for k, _ in params][:PER_PARAM_PAYLOAD_CAP] or ["q", "id", "search"]
+    original_host = urlparse(url).netloc
 
     for key in test_keys:
         for payload in OPEN_REDIRECT_PAYLOADS:
@@ -190,7 +196,9 @@ async def _probe_open_redirect(page, url: str, result: BrowserScanResult) -> Non
             try:
                 await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 final = page.url
-                if "evil.example.com" in final:
+                final_host = urlparse(final).netloc
+                # True open redirect: browser ended up on a different host that contains the payload domain
+                if "evil.example.com" in final_host and final_host != original_host:
                     result.findings.append(BrowserFinding(
                         kind="open_redirect",
                         severity="medium",
@@ -204,21 +212,36 @@ async def _probe_open_redirect(page, url: str, result: BrowserScanResult) -> Non
 
 
 async def _probe_ssrf(page, url: str, result: BrowserScanResult) -> None:
-    """Probe URL params with SSRF payloads; detect IMDS / loopback responses."""
+    """Probe URL params with SSRF payloads; detect IMDS / loopback responses.
+
+    Baseline-aware: only flags loopback/IMDS signatures that appear after payload
+    injection but NOT in the baseline response, filtering reflected-URL false positives.
+    """
     params = list(parse_qsl(urlparse(url).query, keep_blank_values=True))
     test_keys = [k for k, _ in params][:PER_PARAM_PAYLOAD_CAP] or ["url", "redirect", "src"]
 
     _imds_signatures = ("ami-id", "iam/", "169.254")
 
     for key in test_keys:
+        # Establish baseline once per parameter key
+        try:
+            await _gated_goto(page, url, timeout=15000, wait_until="domcontentloaded")
+            baseline_body = (await page.content()).lower()
+        except Exception:
+            baseline_body = ""
+
         for payload in SSRF_PAYLOADS:
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.ssrf", target=test_url, payload=payload)
             try:
                 await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 body = (await page.content()).lower()
-                hit_imds = any(sig in body for sig in _imds_signatures)
-                hit_local = "127.0.0.1" in body or "localhost" in body
+                # Only flag signatures that weren't already present before injection
+                hit_imds = any(sig in body and sig not in baseline_body for sig in _imds_signatures)
+                hit_local = (
+                    ("127.0.0.1" in body and "127.0.0.1" not in baseline_body)
+                    or ("localhost" in body and "localhost" not in baseline_body)
+                )
                 if hit_imds or hit_local:
                     result.findings.append(BrowserFinding(
                         kind="ssrf",
@@ -233,11 +256,23 @@ async def _probe_ssrf(page, url: str, result: BrowserScanResult) -> None:
 
 
 async def _probe_ssti(page, url: str, result: BrowserScanResult) -> None:
-    """Inject SSTI payloads into URL params; check body for computed signatures."""
+    """Inject SSTI payloads into URL params; check body for computed signatures.
+
+    Baseline-aware: only flags a signature if it is absent from the uninjected page
+    but present after injection, preventing false positives from pages that naturally
+    contain strings like '49'.
+    """
     params = list(parse_qsl(urlparse(url).query, keep_blank_values=True))
     test_keys = [k for k, _ in params][:PER_PARAM_PAYLOAD_CAP] or ["q", "template", "name"]
 
     for key in test_keys:
+        # Establish baseline for this parameter key before injecting payloads
+        try:
+            await _gated_goto(page, url, timeout=15000, wait_until="domcontentloaded")
+            baseline_body = await page.content()
+        except Exception:
+            baseline_body = ""
+
         for payload in SSTI_PAYLOADS:
             test_url = _inject_param(url, key, payload)
             log_step("browser.probe.ssti", target=test_url, payload=payload)
@@ -245,12 +280,13 @@ async def _probe_ssti(page, url: str, result: BrowserScanResult) -> None:
                 await _gated_goto(page, test_url, timeout=15000, wait_until="domcontentloaded")
                 body = await page.content()
                 for sig in SSTI_SIGNATURES:
-                    if sig in body:
+                    # Only report if signature is NEW in the injected response (not in baseline)
+                    if sig in body and sig not in baseline_body:
                         result.findings.append(BrowserFinding(
                             kind="ssti",
                             severity="critical",
                             url=test_url,
-                            evidence=f"template evaluated: found '{sig}' in response",
+                            evidence=f"template evaluated: found '{sig}' in response (absent in baseline)",
                             payload=payload,
                         ))
                         log_step("browser.finding", kind="ssti", url=test_url)
