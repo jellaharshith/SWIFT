@@ -47,3 +47,16 @@ swift/log/audit_mcp_tools.json
 
 # Build artifacts
 swift/build/
+
+# AI security layer runtime artifacts (real recon/redteam/audit data, never source)
+logs/
+swift/logs/
+engagements/
+swift/engagements/
+AGENT_MANIFEST.md
+**/AGENT_MANIFEST.md
+COVERAGE.md
+**/COVERAGE.md
+*.jsonl
+!swift/intel/data/*.jsonl
+swiftsec_telemetry.db
