@@ -19,9 +19,12 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+
+from .guardrail import PROMPT_INJECTION_PATTERNS, SENSITIVE_OUTPUT_PATTERNS
 
 Handler = Callable[[dict], str]
 
@@ -34,9 +37,69 @@ class Tool:
     handler: Handler
 
 
+class MCPValidator:
+    """Security gateway for every tool invocation: schema, credential, injection,
+    and scope checks before dispatch; sensitive-data masking after.
+
+    ``scope_targets`` is an optional ``set[str]`` of in-scope hosts/targets — when
+    given, args named ``target``/``url``/``host`` are checked against it for tools
+    whose name suggests network activity (``run_recon``, ``run_scan``, anything not
+    ``cve_lookup``/``scope_check``/``draft_h1_report``).
+    """
+
+    _NETWORK_TOOL_PREFIXES = ("run_", "ai_asm", "redteam")
+    _CREDENTIAL_RE = re.compile(
+        r"\b(?:password|passwd|secret|api[_\-]?key|token|bearer)\s*[:=]\s*\S+",
+        re.IGNORECASE,
+    )
+
+    def __init__(self, scope_targets: set[str] | None = None) -> None:
+        self.scope_targets = scope_targets
+        self._injection_re = [re.compile(p, re.IGNORECASE) for p in PROMPT_INJECTION_PATTERNS]
+        self._sensitive_re = [re.compile(p, re.IGNORECASE) for p in SENSITIVE_OUTPUT_PATTERNS]
+
+    def validate_tool_call(self, tool_name: str, args: dict, schema: dict) -> dict:
+        if not isinstance(args, dict):
+            return {"valid": False, "reason": f"args for {tool_name!r} must be an object"}
+
+        required = schema.get("required", []) if isinstance(schema, dict) else []
+        missing = [k for k in required if k not in args]
+        if missing:
+            return {"valid": False, "reason": f"missing required args: {missing}"}
+
+        for key, val in args.items():
+            if isinstance(val, str) and self._CREDENTIAL_RE.search(val):
+                return {"valid": False, "reason": f"credential-shaped value in arg {key!r}"}
+            if isinstance(val, str):
+                for pattern in self._injection_re:
+                    if pattern.search(val):
+                        return {
+                            "valid": False,
+                            "reason": f"prompt-injection pattern in arg {key!r}: {pattern.pattern}",
+                        }
+
+        if self.scope_targets is not None and tool_name.startswith(self._NETWORK_TOOL_PREFIXES):
+            target = str(args.get("target") or args.get("url") or args.get("host") or "")
+            if target and target not in self.scope_targets:
+                return {"valid": False, "reason": f"{target!r} not in scope.yaml"}
+
+        return {"valid": True, "reason": ""}
+
+    def validate_tool_output(self, tool_name: str, output: str) -> dict:
+        text = output or ""
+        flags: list[str] = []
+        masked = text
+        for pattern in self._sensitive_re:
+            if pattern.search(masked):
+                flags.append(pattern.pattern)
+                masked = pattern.sub("[REDACTED]", masked)
+        return {"clean": not flags, "output": masked, "flags": flags}
+
+
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, validator: MCPValidator | None = None) -> None:
         self._tools: dict[str, Tool] = {}
+        self.validator = validator or MCPValidator()
 
     def register(
         self,
@@ -60,10 +123,18 @@ class ToolRegistry:
         tool = self._tools.get(name)
         if tool is None:
             return f"[error] unknown tool: {name!r} (available: {', '.join(self.names())})"
+
+        gate = self.validator.validate_tool_call(name, args or {}, tool.parameters)
+        if not gate["valid"]:
+            return f"[error] tool {name!r} blocked by MCPValidator: {gate['reason']}"
+
         try:
-            return tool.handler(args or {})
+            result = tool.handler(args or {})
         except Exception as e:
             return f"[error] tool {name!r} failed: {e}"
+
+        scan = self.validator.validate_tool_output(name, result)
+        return scan["output"]
 
 
 # ----------------------------------------------------------------- helpers
@@ -104,8 +175,9 @@ def build_registry(
     recon: Callable[..., Any] | None = None,
     scanner: Callable[..., Any] | None = None,
     h1: Callable[[dict], str] | None = None,
+    validator: MCPValidator | None = None,
 ) -> ToolRegistry:
-    reg = ToolRegistry()
+    reg = ToolRegistry(validator=validator)
 
     # --- cve_lookup ------------------------------------------------------
     def _cve_lookup(args: dict) -> str:
@@ -274,6 +346,76 @@ def build_registry(
             "required": ["fields"],
         },
         _draft_h1_report,
+    )
+
+    # --- ai_asm ------------------------------------------------------------
+    def _ai_asm(args: dict) -> str:
+        target = str(args.get("target", "")).strip()
+        if not target:
+            return "[error] ai_asm requires a 'target'."
+        verdict = _scope_verdict(target, "active_scan")
+        if verdict is None:
+            return (
+                f"REFUSED: cannot verify {target!r} is in scope (no ROE). AI ASM "
+                "performs light-active probes — supply an ROE and retry."
+            )
+        if not verdict.get("in_scope"):
+            return f"REFUSED: {target} is out of scope. {verdict.get('reason', '')}".strip()
+        from .ai_asm import run_ai_asm
+        return _summarize(run_ai_asm(target))
+
+    reg.register(
+        "ai_asm",
+        "Run the AI Attack Surface Mapper against an in-scope target: discover "
+        "LLM endpoints, inference servers, vector DBs, MCP servers, and leaked AI "
+        "API keys. Run this BEFORE standard recon on any target with AI features.",
+        {
+            "type": "object",
+            "properties": {"target": {"type": "string"}},
+            "required": ["target"],
+        },
+        _ai_asm,
+    )
+
+    # --- redteam -------------------------------------------------------------
+    def _redteam(args: dict) -> str:
+        endpoint = str(args.get("endpoint", "")).strip()
+        if not endpoint:
+            return "[error] redteam requires an 'endpoint'."
+        verdict = _scope_verdict(endpoint, "exploit")
+        if verdict is None or not verdict.get("in_scope"):
+            return (
+                f"REFUSED: {endpoint!r} must be confirmed in scope (technique=exploit) "
+                "before red teaming. Run scope_check first."
+            )
+        if not bool(args.get("confirmed")):
+            return (
+                "REFUSED: redteam requires confirmed=true — operator must explicitly "
+                "opt in to sending attack payloads to this endpoint."
+            )
+        from .redteam import AIRedTeamer
+        category = str(args.get("category", "all"))
+        result = AIRedTeamer().run(endpoint, category=category, confirmed=True)
+        return _summarize(result)
+
+    reg.register(
+        "redteam",
+        "Send crafted prompt-injection / jailbreak / data-exfil attack payloads to "
+        "an in-scope, operator-confirmed LLM endpoint and score responses for "
+        "compromise. Requires confirmed=true.",
+        {
+            "type": "object",
+            "properties": {
+                "endpoint": {"type": "string"},
+                "category": {
+                    "type": "string",
+                    "description": "prompt_injection|jailbreak|data_exfil|indirect_injection|model_dos|hallucination_abuse|all",
+                },
+                "confirmed": {"type": "boolean"},
+            },
+            "required": ["endpoint", "confirmed"],
+        },
+        _redteam,
     )
 
     return reg

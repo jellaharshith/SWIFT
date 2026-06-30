@@ -136,7 +136,10 @@ def test_load_settings_resolved_backend(monkeypatch):
 
 def test_registry_has_all_tools(store):
     reg = build_registry(store)
-    assert set(reg.names()) == {"cve_lookup", "scope_check", "run_recon", "run_scan", "draft_h1_report"}
+    assert set(reg.names()) == {
+        "cve_lookup", "scope_check", "run_recon", "run_scan", "draft_h1_report",
+        "ai_asm", "redteam",
+    }
 
 
 def test_unknown_tool_handled(store):
