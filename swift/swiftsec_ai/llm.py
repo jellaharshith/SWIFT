@@ -21,6 +21,7 @@ from collections.abc import Callable
 from typing import Any
 
 from .config import Settings
+from .guardrail import LLMGuardrail
 
 Executor = Callable[[str, dict], str]
 OnTool = Callable[[str, dict, str], None] | None
@@ -66,11 +67,12 @@ def to_ollama_tools(neutral: list[dict[str, Any]]) -> list[dict[str, Any]]:
 class OllamaBackend:
     name = "ollama"
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, guardrail: LLMGuardrail | None = None) -> None:
         self.settings = settings
         self.model = settings.ollama_model
         self.host = settings.ollama_host.rstrip("/")
         self.timeout = settings.ollama_timeout
+        self.guardrail = guardrail or LLMGuardrail()
 
     def run(
         self,
@@ -82,6 +84,8 @@ class OllamaBackend:
         on_tool: OnTool = None,
     ) -> str:
         import requests
+
+        self.guardrail.enforce(user_message)
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system},
@@ -109,7 +113,7 @@ class OllamaBackend:
             messages.append(msg)
             tool_calls = msg.get("tool_calls") or []
             if not tool_calls:
-                return msg.get("content", "") or ""
+                return self._finish(msg.get("content", "") or "")
 
             for call in tool_calls:
                 fn = call.get("function", {}) or {}
@@ -125,17 +129,23 @@ class OllamaBackend:
                     on_tool(name, args if isinstance(args, dict) else {}, result)
                 messages.append({"role": "tool", "name": name, "content": result})
 
-        return "[swiftsec_ai] stopped: reached max tool iterations without a final answer."
+        return self._finish("[swiftsec_ai] stopped: reached max tool iterations without a final answer.")
+
+    def _finish(self, text: str) -> str:
+        scan = self.guardrail.scan_response(text)
+        self.guardrail.log_response_flags(scan["flags"])
+        return scan["masked"]
 
 
 class AnthropicBackend:
     name = "anthropic"
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, guardrail: LLMGuardrail | None = None) -> None:
         self.settings = settings
         self.model = settings.anthropic_model
         self.api_key = settings.anthropic_api_key
         self.max_tokens = settings.anthropic_max_tokens
+        self.guardrail = guardrail or LLMGuardrail()
 
     def run(
         self,
@@ -152,6 +162,8 @@ class AnthropicBackend:
             raise BackendError(
                 "ANTHROPIC_API_KEY is not set — cannot use the anthropic backend."
             )
+
+        self.guardrail.enforce(user_message)
 
         headers = {
             "x-api-key": self.api_key,
@@ -185,7 +197,7 @@ class AnthropicBackend:
             messages.append({"role": "assistant", "content": content_blocks})
 
             if data.get("stop_reason") != "tool_use":
-                return _anthropic_text(content_blocks)
+                return self._finish(_anthropic_text(content_blocks))
 
             tool_results = []
             for block in content_blocks:
@@ -205,14 +217,19 @@ class AnthropicBackend:
                 )
             messages.append({"role": "user", "content": tool_results})
 
-        return "[swiftsec_ai] stopped: reached max tool iterations without a final answer."
+        return self._finish("[swiftsec_ai] stopped: reached max tool iterations without a final answer.")
+
+    def _finish(self, text: str) -> str:
+        scan = self.guardrail.scan_response(text)
+        self.guardrail.log_response_flags(scan["flags"])
+        return scan["masked"]
 
 
 def _anthropic_text(blocks: list[dict[str, Any]]) -> str:
     return "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
 
 
-def build_backend(settings: Settings):
+def build_backend(settings: Settings, guardrail: LLMGuardrail | None = None):
     """Factory: resolve ``auto`` and return the matching backend instance.
 
     Construction never performs network I/O, so a backend can be built even when
@@ -220,7 +237,7 @@ def build_backend(settings: Settings):
     """
     backend = settings.resolved_backend
     if backend == "anthropic":
-        return AnthropicBackend(settings)
+        return AnthropicBackend(settings, guardrail=guardrail)
     if backend == "ollama":
-        return OllamaBackend(settings)
+        return OllamaBackend(settings, guardrail=guardrail)
     raise BackendError(f"unknown backend: {backend!r}")

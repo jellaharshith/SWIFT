@@ -104,15 +104,30 @@ is set, else Ollama.
 | `ai ask "…" [--roe roe.yaml]` | One-shot question; CVE context auto-injected; active tools ROE-gated |
 | `ai repl [--roe roe.yaml]` | Interactive loop |
 | `ai schedule install\|uninstall\|status [--hour 7] [--minute 0]` | Daily CVE auto-sync (launchd on macOS, cron on Linux) |
+| `ai ai-asm <target> [--roe roe.yaml]` | Map a target's AI-specific attack surface (LLM endpoints, inference servers, vector DBs, leaked AI API keys) — run before standard recon on any target with AI features |
+| `ai ai-redteam <endpoint> [--roe roe.yaml] [--category …] --confirm` | Send crafted prompt-injection / jailbreak / data-exfil attack payloads to an in-scope LLM endpoint and score responses for compromise |
 
-Five tools are exposed to the model: `cve_lookup`, `scope_check` (required before active
-work), `run_recon` (OSINT), `run_scan` (Playwright web scan), `draft_h1_report`.
+Seven tools are exposed to the model: `cve_lookup`, `scope_check` (required before active
+work), `run_recon` (OSINT), `run_scan` (Playwright web scan), `draft_h1_report`, `ai_asm`,
+`redteam`. Every prompt/response passes `swiftsec_ai/guardrail.py` (`LLMGuardrail`: blocks
+prompt injection, masks credentials/PII before disk write); every tool call passes
+`swiftsec_ai/tools.py`'s `MCPValidator` (schema + credential + injection + scope gate before
+dispatch, output masking after); every run is archived to `swiftsec_ai/telemetry.py`'s
+SQLite+FTS5 `run_events` store (`swiftsec ai coverage` via the assistant's `Telemetry.
+write_coverage`). `swiftsec_ai/identity.py`'s `SubAgentIdentity` (role-scoped permissions +
+signed action log) is available for any future multi-agent caller.
 
 ```sh
 # Local backend (free): ollama pull llama3.1   — or set ANTHROPIC_API_KEY for cloud
 swiftsec ai sync --days 30                                   # build the CVE mirror
 swiftsec ai ask "Recent CISA-KEV CVEs affecting nginx?"      # CVE RAG, no target
 swiftsec ai ask "Recon and scan example.com" --roe roe.yaml  # active tools need an ROE
+
+# AI attack surface mapping — run first on any target with chat/search/copilot features
+swiftsec ai ai-asm example.com --roe roe.yaml
+
+# AI red teaming — requires both ROE authorization (technique=exploit) and --confirm
+swiftsec ai ai-redteam https://example.com/api/chat --roe roe.yaml --category prompt_injection --confirm
 
 # Keep the mirror fresh automatically — installs a daily 07:00 job
 swiftsec ai schedule install            # launchd (macOS) / cron (Linux); --hour/--minute to change

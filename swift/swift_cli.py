@@ -850,6 +850,20 @@ def build_parser() -> argparse.ArgumentParser:
     ai_sched.add_argument("action", choices=["install", "uninstall", "status"])
     ai_sched.add_argument("--hour", type=int, default=7, help="hour of day, 0-23 (default 7)")
     ai_sched.add_argument("--minute", type=int, default=0, help="minute, 0-59 (default 0)")
+    ai_asm = ai_sub.add_parser(
+        "ai-asm", help="Map a target's AI-specific attack surface (run before standard recon)")
+    ai_asm.add_argument("target", help="host or URL")
+    ai_asm.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
+    ai_rt = ai_sub.add_parser(
+        "ai-redteam", help="Send crafted attack prompts to an LLM endpoint and score responses")
+    ai_rt.add_argument("endpoint", help="LLM endpoint URL")
+    ai_rt.add_argument("--roe", default=None, help="ROE yaml authorizing active tools")
+    ai_rt.add_argument(
+        "--category", default="all",
+        help="prompt_injection|jailbreak|data_exfil|indirect_injection|model_dos|hallucination_abuse|all")
+    ai_rt.add_argument(
+        "--confirm", action="store_true",
+        help="explicit operator confirmation -- required, endpoint must be authorized for technique=exploit in the ROE")
 
     # v8.0 -- Decepticon + claude-bug-bounty merged subcommands
     from cli.v8 import register as _register_v8
@@ -1446,6 +1460,31 @@ def run_ai(args: argparse.Namespace) -> dict[str, Any]:
                     break
                 if line:
                     print(assistant.ask(line))
+        elif cmd == "ai-asm":
+            from log.audit import log_step
+            verdict = _roe_adapter(args.target, "active_scan")
+            if not verdict.get("in_scope"):
+                print(_json.dumps({"error": f"REFUSED: {args.target} not authorized", **verdict}, indent=2))
+                return {"status": "refused", "command": "ai", "ai_cmd": cmd}
+            from swiftsec_ai.ai_asm import run_ai_asm
+            result = run_ai_asm(args.target)
+            log_step("ai_asm", target=args.target, surfaces=result["tier1_count"])
+            print(_json.dumps(result, indent=2))
+        elif cmd == "ai-redteam":
+            from log.audit import log_step
+            if not args.confirm:
+                print(_json.dumps(
+                    {"error": "REFUSED: --confirm required -- operator must explicitly opt in"},
+                    indent=2))
+                return {"status": "refused", "command": "ai", "ai_cmd": cmd}
+            verdict = _roe_adapter(args.endpoint, "exploit")
+            if not verdict.get("in_scope"):
+                print(_json.dumps({"error": f"REFUSED: {args.endpoint} not authorized for exploit", **verdict}, indent=2))
+                return {"status": "refused", "command": "ai", "ai_cmd": cmd}
+            from swiftsec_ai.redteam import AIRedTeamer
+            result = AIRedTeamer().run(args.endpoint, category=args.category, confirmed=True)
+            log_step("ai_redteam", endpoint=args.endpoint, findings=len(result["findings_queued"]))
+            print(_json.dumps(result, indent=2))
         return {"status": "ok", "command": "ai", "ai_cmd": cmd}
     finally:
         assistant.close()

@@ -35,6 +35,23 @@ def _build_parser() -> argparse.ArgumentParser:
     sched.add_argument("action", choices=["install", "uninstall", "status"])
     sched.add_argument("--hour", type=int, default=7, help="hour of day, 0-23 (default 7)")
     sched.add_argument("--minute", type=int, default=0, help="minute, 0-59 (default 0)")
+
+    asm = sub.add_parser("ai-asm", help="Map a target's AI-specific attack surface (run first)")
+    asm.add_argument("target", help="host or URL")
+
+    rt = sub.add_parser("redteam", help="Send crafted attack prompts to an LLM endpoint")
+    rt.add_argument("endpoint", help="LLM endpoint URL")
+    rt.add_argument(
+        "--category", default="all",
+        help="prompt_injection|jailbreak|data_exfil|indirect_injection|model_dos|hallucination_abuse|all",
+    )
+    rt.add_argument(
+        "--confirm", action="store_true",
+        help="explicit operator confirmation — required, endpoint must already be in scope.yaml",
+    )
+
+    cov = sub.add_parser("coverage", help="Print/write the telemetry COVERAGE.md for an engagement")
+    cov.add_argument("--engagement", default="default")
     return p
 
 
@@ -65,6 +82,33 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "ask":
             print(assistant.ask(args.message))
+            return 0
+
+        if args.command == "ai-asm":
+            from .ai_asm import run_ai_asm
+            print(json.dumps(run_ai_asm(args.target), indent=2))
+            return 0
+
+        if args.command == "redteam":
+            from .redteam import AIRedTeamer, RedTeamNotConfirmed
+            if not args.confirm:
+                print(
+                    "[error] redteam requires --confirm — operator must explicitly opt in, "
+                    "and the endpoint must already be confirmed in scope.yaml.",
+                    file=sys.stderr,
+                )
+                return 2
+            try:
+                result = AIRedTeamer().run(args.endpoint, category=args.category, confirmed=True)
+            except RedTeamNotConfirmed as e:
+                print(f"[error] {e}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, indent=2))
+            return 0
+
+        if args.command == "coverage":
+            path = assistant.telemetry.write_coverage(args.engagement)
+            print(path.read_text(encoding="utf-8"))
             return 0
 
         if args.command == "repl":

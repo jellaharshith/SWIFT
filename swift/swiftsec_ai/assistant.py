@@ -6,9 +6,11 @@ from typing import Any
 
 from .config import Settings, load_settings
 from .cve import CVEStore
+from .guardrail import GuardrailViolation, LLMGuardrail
 from .llm import build_backend
 from .prompts import SYSTEM_PROMPT
-from .tools import build_registry
+from .telemetry import Telemetry
+from .tools import MCPValidator, build_registry
 
 
 class SwiftSecAssistant:
@@ -30,15 +32,21 @@ class SwiftSecAssistant:
         recon: Callable[..., Any] | None = None,
         scanner: Callable[..., Any] | None = None,
         h1: Callable[[dict], str] | None = None,
+        engagement_id: str = "default",
     ) -> None:
         self.settings = settings or load_settings()
+        self.engagement_id = engagement_id
         self.cve = CVEStore(self.settings.cve_db_path, nvd_api_key=self.settings.nvd_api_key)
         # Persist the configured interval so CVEStore.sync can honor it.
         self.cve.set_meta(
             "min_sync_interval_seconds", str(self.settings.cve_min_sync_interval_seconds)
         )
-        self.backend = build_backend(self.settings)
-        self.registry = build_registry(self.cve, roe=roe, recon=recon, scanner=scanner, h1=h1)
+        self.guardrail = LLMGuardrail()
+        self.telemetry = Telemetry()
+        self.backend = build_backend(self.settings, guardrail=self.guardrail)
+        self.registry = build_registry(
+            self.cve, roe=roe, recon=recon, scanner=scanner, h1=h1, validator=MCPValidator()
+        )
         self.last_trace: list[dict[str, Any]] = []
 
     # ------------------------------------------------------------------ CVE RAG
@@ -68,16 +76,28 @@ class SwiftSecAssistant:
 
         def _on_tool(name: str, args: dict, result: str) -> None:
             self.last_trace.append({"tool": name, "args": args, "result_len": len(result)})
+            self.telemetry.log(
+                self.engagement_id, "tool_call", tool_name=name,
+                target=args.get("target") or args.get("endpoint"),
+                summary=result[:200],
+            )
 
         user_message = self._inject_cve_context(message)
-        return self.backend.run(
-            system=SYSTEM_PROMPT,
-            user_message=user_message,
-            tools=self.registry.to_neutral_schema(),
-            executor=self.registry.execute,
-            max_iterations=self.settings.max_tool_iterations,
-            on_tool=_on_tool,
-        )
+        try:
+            return self.backend.run(
+                system=SYSTEM_PROMPT,
+                user_message=user_message,
+                tools=self.registry.to_neutral_schema(),
+                executor=self.registry.execute,
+                max_iterations=self.settings.max_tool_iterations,
+                on_tool=_on_tool,
+            )
+        except GuardrailViolation as e:
+            self.telemetry.log(
+                self.engagement_id, "guardrail_violation",
+                summary=str(e), flags=e.flags,
+            )
+            raise
 
     # ------------------------------------------------------------------ info
     def info(self) -> dict[str, Any]:
@@ -98,4 +118,7 @@ class SwiftSecAssistant:
         }
 
     def close(self) -> None:
+        self.telemetry.log(self.engagement_id, "run_stop", summary="assistant closed")
+        self.telemetry.write_coverage(self.engagement_id)
+        self.telemetry.close()
         self.cve.close()
